@@ -8,6 +8,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 
 const { uploadBufferToCloudflare } = require('../utils/cloudflare');
+const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 
 // Create inventory (with optional image upload - base64/binary)
 router.post('/', upload.single('image'), async (req, res) => {
@@ -15,18 +16,24 @@ router.post('/', upload.single('image'), async (req, res) => {
     const data = req.body;
     // If Cloudflare configured, upload file/base64 to Cloudflare and store CDN URL string
     try {
-      if (req.file && CF_API_TOKEN) {
-        const cdnUrl = await uploadBufferToCloudflare(req.file.buffer, req.file.originalname || 'image');
-        data.image = cdnUrl;
-      } else if (data.imageBase64 && CF_API_TOKEN) {
-        const b = Buffer.from(data.imageBase64, 'base64');
-        const cdnUrl = await uploadBufferToCloudflare(b, 'image');
-        data.image = cdnUrl;
-      } else if (req.file) {
-        // No Cloudflare: store image as base64 string in 'image' field (legacy)
-        data.image = req.file.buffer.toString('base64');
+      if (req.file) {
+        if (process.env.CLOUDINARY_URL) {
+          data.image = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'image');
+        } else if (process.env.CF_API_TOKEN) {
+          data.image = await uploadBufferToCloudflare(req.file.buffer, req.file.originalname || 'image');
+        } else {
+          data.image = req.file.buffer.toString('base64');
+        }
       } else if (data.imageBase64) {
-        data.image = data.imageBase64; // store base64 string
+        if (process.env.CLOUDINARY_URL) {
+          const b = Buffer.from(data.imageBase64, 'base64');
+          data.image = await uploadBufferToCloudinary(b, 'image');
+        } else if (process.env.CF_API_TOKEN) {
+          const b = Buffer.from(data.imageBase64, 'base64');
+          data.image = await uploadBufferToCloudflare(b, 'image');
+        } else {
+          data.image = data.imageBase64; // store base64 string
+        }
       }
     } catch (e) {
       console.error('CDN upload failed, falling back:', e.message || e);
