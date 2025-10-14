@@ -78,17 +78,30 @@ router.put('/:id', upload.single('image'), async (req, res) => {
   try {
     const data = req.body;
     try {
-      if (req.file && CF_API_TOKEN) {
-        const cdnUrl = await uploadBufferToCloudflare(req.file.buffer, req.file.originalname || 'image');
-        data.image = cdnUrl;
+      // If client explicitly sent image = '' -> clear image in DB
+      if (typeof data.image === 'string' && data.image === '') {
+        data.image = '';
       } else if (req.file) {
-        data.image = req.file.buffer.toString('base64');
+        if (process.env.CLOUDINARY_URL) {
+          data.image = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'image');
+        } else if (process.env.CF_API_TOKEN) {
+          data.image = await uploadBufferToCloudflare(req.file.buffer, req.file.originalname || 'image');
+        } else {
+          data.image = req.file.buffer.toString('base64');
+        }
       }
     } catch (e) {
       console.error('CDN upload failed on update, falling back:', e.message || e);
       if (req.file) data.image = req.file.buffer.toString('base64');
     }
-    const updated = await Inventory.findByIdAndUpdate(req.params.id, data, { new: true });
+    // Build update operations: support clearing image via sending image == ''
+    const updateOps = {};
+    const shouldClearImage = typeof data.image === 'string' && data.image === '';
+    // Remove image key from set fields so we can $unset instead
+    if (shouldClearImage) delete data.image;
+    if (Object.keys(data).length) updateOps['$set'] = data;
+    if (shouldClearImage) updateOps['$unset'] = { image: '' };
+    const updated = await Inventory.findByIdAndUpdate(req.params.id, updateOps, { new: true });
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });

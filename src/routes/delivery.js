@@ -76,7 +76,13 @@ router.put('/:id', upload.single('invoice'), async (req, res) => {
       console.error('CDN upload failed for invoice on update, falling back:', e.message || e);
       if (req.file) body.invoice = req.file.buffer.toString('base64');
     }
-    const updated = await Delivery.findByIdAndUpdate(req.params.id, body, { new: true });
+    // Support clearing invoice when client sends invoice == ''
+    const shouldClearInvoice = typeof body.invoice === 'string' && body.invoice === '';
+    if (shouldClearInvoice) delete body.invoice;
+    const updateOps = {};
+    if (Object.keys(body).length) updateOps['$set'] = body;
+    if (shouldClearInvoice) updateOps['$unset'] = { invoice: '' };
+    const updated = await Delivery.findByIdAndUpdate(req.params.id, updateOps, { new: true });
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
