@@ -11,10 +11,8 @@ const InventorySchema = new mongoose.Schema({
   uom: { type: String },
   size: { type: String },
   remark: { type: String },
-  image: {
-    data: Buffer,
-    contentType: String
-  }
+  // Store image as CDN URL string
+  image: { type: String }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Inventory', InventorySchema);

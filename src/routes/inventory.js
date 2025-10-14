@@ -4,17 +4,55 @@ const router = express.Router();
 const Inventory = require('../models/inventory');
 const multer = require('multer');
 const upload = multer();
+const axios = require('axios');
+const FormData = require('form-data');
+
+const CF_ACCOUNT_ID = process.env.CF_ACCOUNT_ID;
+const CF_API_TOKEN = process.env.CF_API_TOKEN;
+const CF_ACCOUNT_HASH = process.env.CF_ACCOUNT_HASH;
+const CF_UPLOAD_URL = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/images/v1`;
+function cdnDeliveryUrl(imageId, variant = 'public') {
+  return `https://imagedelivery.net/${CF_ACCOUNT_HASH}/${imageId}/${variant}`;
+}
+
+async function uploadBufferToCloudflare(buffer, filename) {
+  if (!CF_API_TOKEN || !CF_ACCOUNT_ID) throw new Error('Cloudflare not configured');
+  const form = new FormData();
+  form.append('file', buffer, { filename });
+  const resp = await axios.post(CF_UPLOAD_URL, form, {
+    headers: { ...form.getHeaders(), Authorization: `Bearer ${CF_API_TOKEN}` },
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+  });
+  const result = resp.data && resp.data.result;
+  if (!result) throw new Error('Cloudflare upload failed');
+  return cdnDeliveryUrl(result.id, 'public');
+}
 
 // Create inventory (with optional image upload - base64/binary)
 router.post('/', upload.single('image'), async (req, res) => {
   try {
     const data = req.body;
-    if (req.file) {
-      data.image = { data: req.file.buffer, contentType: req.file.mimetype };
-    } else if (data.imageBase64) {
-      // if frontend sends base64 string
-      const b = Buffer.from(data.imageBase64, 'base64');
-      data.image = { data: b, contentType: data.imageContentType || 'image/png' };
+    // If Cloudflare configured, upload file/base64 to Cloudflare and store CDN URL string
+    try {
+      if (req.file && CF_API_TOKEN) {
+        const cdnUrl = await uploadBufferToCloudflare(req.file.buffer, req.file.originalname || 'image');
+        data.image = cdnUrl;
+      } else if (data.imageBase64 && CF_API_TOKEN) {
+        const b = Buffer.from(data.imageBase64, 'base64');
+        const cdnUrl = await uploadBufferToCloudflare(b, 'image');
+        data.image = cdnUrl;
+      } else if (req.file) {
+        // No Cloudflare: store image as base64 string in 'image' field (legacy)
+        data.image = req.file.buffer.toString('base64');
+      } else if (data.imageBase64) {
+        data.image = data.imageBase64; // store base64 string
+      }
+    } catch (e) {
+      console.error('CDN upload failed, falling back:', e.message || e);
+      // If CDN fails, fallback to legacy storage behaviors
+      if (req.file) data.image = req.file.buffer.toString('base64');
+      else if (data.imageBase64) data.image = data.imageBase64;
     }
     const inv = new Inventory(data);
     await inv.save();
@@ -52,8 +90,16 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', upload.single('image'), async (req, res) => {
   try {
     const data = req.body;
-    if (req.file) {
-      data.image = { data: req.file.buffer, contentType: req.file.mimetype };
+    try {
+      if (req.file && CF_API_TOKEN) {
+        const cdnUrl = await uploadBufferToCloudflare(req.file.buffer, req.file.originalname || 'image');
+        data.image = cdnUrl;
+      } else if (req.file) {
+        data.image = req.file.buffer.toString('base64');
+      }
+    } catch (e) {
+      console.error('CDN upload failed on update, falling back:', e.message || e);
+      if (req.file) data.image = req.file.buffer.toString('base64');
     }
     const updated = await Inventory.findByIdAndUpdate(req.params.id, data, { new: true });
     res.json(updated);
