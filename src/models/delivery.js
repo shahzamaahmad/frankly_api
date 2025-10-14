@@ -20,11 +20,8 @@ const DeliverySchema = new mongoose.Schema({
   amount: { type: Number },
   receivedBy: { type: String },
   remarks: { type: String },
-  invoice: {
-    data: Buffer,
-    contentType: String,
-    filename: String
-  }
+  // store invoice as CDN URL string (or fallback base64 string)
+  invoice: { type: String }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Delivery', DeliverySchema);

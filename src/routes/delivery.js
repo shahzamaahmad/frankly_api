@@ -4,15 +4,28 @@ const router = express.Router();
 const Delivery = require('../models/delivery');
 const multer = require('multer');
 const upload = multer();
+const { uploadBufferToCloudflare } = require('../utils/cloudflare');
 
 router.post('/', upload.single('invoice'), async (req, res) => {
   try {
     const body = req.body;
-    if (req.file) {
-      body.invoice = { data: req.file.buffer, contentType: req.file.mimetype, filename: req.file.originalname };
-    } else if (body.invoiceBase64) {
-      const b = Buffer.from(body.invoiceBase64, 'base64');
-      body.invoice = { data: b, contentType: body.invoiceContentType || 'application/pdf', filename: body.invoiceFilename || 'invoice' };
+    try {
+      if (req.file && process.env.CF_API_TOKEN) {
+        const cdnUrl = await uploadBufferToCloudflare(req.file.buffer, req.file.originalname || 'invoice');
+        body.invoice = cdnUrl;
+      } else if (body.invoiceBase64 && process.env.CF_API_TOKEN) {
+        const b = Buffer.from(body.invoiceBase64, 'base64');
+        const cdnUrl = await uploadBufferToCloudflare(b, 'invoice');
+        body.invoice = cdnUrl;
+      } else if (req.file) {
+        body.invoice = req.file.buffer.toString('base64');
+      } else if (body.invoiceBase64) {
+        body.invoice = body.invoiceBase64;
+      }
+    } catch (e) {
+      console.error('CDN upload failed for invoice, falling back:', e.message || e);
+      if (req.file) body.invoice = req.file.buffer.toString('base64');
+      else if (body.invoiceBase64) body.invoice = body.invoiceBase64;
     }
     const d = new Delivery(body);
     await d.save();
@@ -44,8 +57,16 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', upload.single('invoice'), async (req, res) => {
   try {
     const body = req.body;
-    if (req.file) {
-      body.invoice = { data: req.file.buffer, contentType: req.file.mimetype, filename: req.file.originalname };
+    try {
+      if (req.file && process.env.CF_API_TOKEN) {
+        const cdnUrl = await uploadBufferToCloudflare(req.file.buffer, req.file.originalname || 'invoice');
+        body.invoice = cdnUrl;
+      } else if (req.file) {
+        body.invoice = req.file.buffer.toString('base64');
+      }
+    } catch (e) {
+      console.error('CDN upload failed for invoice on update, falling back:', e.message || e);
+      if (req.file) body.invoice = req.file.buffer.toString('base64');
     }
     const updated = await Delivery.findByIdAndUpdate(req.params.id, body, { new: true });
     res.json(updated);
