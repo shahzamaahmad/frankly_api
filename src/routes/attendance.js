@@ -4,8 +4,8 @@ const Attendance = require('../models/attendance');
 
 router.post('/checkin', async (req, res) => {
   try {
-    const { latitude, longitude, address } = req.body;
-    const date = new Date().toISOString().split('T')[0];
+    const { latitude, longitude, address, date } = req.body;
+    const recordDate = date || new Date().toISOString().split('T')[0];
     
     const openAttendance = await Attendance.findOne({
       user: req.user.id,
@@ -20,7 +20,7 @@ router.post('/checkin', async (req, res) => {
       user: req.user.id,
       checkIn: new Date(),
       checkInLocation: { latitude, longitude, address },
-      date
+      date: recordDate
     });
     
     await attendance.save();
