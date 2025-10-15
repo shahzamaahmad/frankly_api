@@ -20,6 +20,27 @@ const UserSchema = new mongoose.Schema({
   role: { type: String, enum: ['admin', 'storekeeper', 'engineer', 'driver', 'emp', 'labor',], default: 'emp' },
   isActive: { type: Boolean, default: true },
 
+  permissions: {
+    viewInventory: { type: Boolean, default: true },
+    addInventory: { type: Boolean, default: false },
+    editInventory: { type: Boolean, default: false },
+    deleteInventory: { type: Boolean, default: false },
+    viewTransactions: { type: Boolean, default: true },
+    addTransactions: { type: Boolean, default: false },
+    editTransactions: { type: Boolean, default: false },
+    deleteTransactions: { type: Boolean, default: false },
+    viewDeliveries: { type: Boolean, default: true },
+    addDeliveries: { type: Boolean, default: false },
+    editDeliveries: { type: Boolean, default: false },
+    deleteDeliveries: { type: Boolean, default: false },
+    viewEmployees: { type: Boolean, default: false },
+    addEmployees: { type: Boolean, default: false },
+    editEmployees: { type: Boolean, default: false },
+    deleteEmployees: { type: Boolean, default: false },
+    viewContacts: { type: Boolean, default: true },
+    viewDashboard: { type: Boolean, default: true },
+  },
+
   department: { type: String },
   lastLoginAt: { type: Date },
 
@@ -48,20 +69,19 @@ UserSchema.pre('save', async function (next) {
 
 UserSchema.statics.generateUsername = function(firstName, lastName) {
   let baseUsername = '';
-  if (firstName && lastName) {
-    baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`;
+  if (firstName) {
+    baseUsername = firstName.toLowerCase();
   } else if (lastName) {
     baseUsername = lastName.toLowerCase();
-  } else if (firstName) {
-    baseUsername = firstName.toLowerCase();
   } else {
     baseUsername = 'user';
   }
   baseUsername = baseUsername.replace(/[^a-z0-9]/g, '');
-  if (baseUsername.length > 8) {
-    baseUsername = baseUsername.substring(0, 8);
+  if (baseUsername.length > 6) {
+    baseUsername = baseUsername.substring(0, 6);
   }
-  return baseUsername;
+  const randomNum = Math.floor(Math.random() * 90) + 10;
+  return `${baseUsername}${randomNum}`;
 };
 
 UserSchema.statics.checkUsernameExists = async function(username) {
