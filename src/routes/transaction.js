@@ -6,9 +6,14 @@ const { authMiddleware } = require('../middlewares/auth');
 
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const transactions = await Transaction.find()
+    const { site, item } = req.query;
+    const filter = {};
+    if (site) filter.site = site;
+    if (item) filter.item = item;
+    
+    const transactions = await Transaction.find(filter)
       .populate('employee', 'fullName username email')
-      .populate('site', 'name location')
+      .populate('site', 'siteName siteCode')
       .populate('item', 'name sku')
       .sort({ timestamp: -1 });
     res.json(transactions);
@@ -21,7 +26,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id)
       .populate('employee', 'fullName username email')
-      .populate('site', 'name location')
+      .populate('site', 'siteName siteCode')
       .populate('item');
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
     res.json(transaction);
@@ -70,7 +75,7 @@ router.post('/', authMiddleware, async (req, res) => {
     await transaction.save();
     const populated = await Transaction.findById(transaction._id)
       .populate('employee', 'fullName username email')
-      .populate('site', 'name location')
+      .populate('site', 'siteName siteCode')
       .populate('item', 'name sku');
     res.status(201).json(populated);
   } catch (err) {
@@ -119,7 +124,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
     await transaction.save();
     const populated = await Transaction.findById(transaction._id)
       .populate('employee', 'fullName username email')
-      .populate('site', 'name location')
+      .populate('site', 'siteName siteCode')
       .populate('item', 'name sku');
     res.json(populated);
   } catch (err) {
