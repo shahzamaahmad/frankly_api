@@ -67,7 +67,7 @@ UserSchema.pre('save', async function (next) {
   next();
 });
 
-UserSchema.statics.generateUsername = function(firstName, lastName) {
+UserSchema.statics.generateUsername = function (firstName, lastName) {
   let baseUsername = '';
   if (firstName) {
     baseUsername = firstName.toLowerCase();
@@ -84,7 +84,7 @@ UserSchema.statics.generateUsername = function(firstName, lastName) {
   return `${baseUsername}${randomNum}`;
 };
 
-UserSchema.statics.checkUsernameExists = async function(username) {
+UserSchema.statics.checkUsernameExists = async function (username) {
   const user = await this.findOne({ username });
   return !!user;
 };

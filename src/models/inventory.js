@@ -28,7 +28,7 @@ const InventorySchema = new mongoose.Schema({
   color: { type: String },
   brand: { type: String },
   modelNumber: { type: String },
-  serialNumberRequired: { type: Boolean, default: false },
+  serialNumber: { type: String },
   warrantyMonths: { type: Number },
   certification: {
     iso: { type: String },
