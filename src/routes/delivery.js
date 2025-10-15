@@ -4,7 +4,6 @@ const router = express.Router();
 const Delivery = require('../models/delivery');
 const multer = require('multer');
 const upload = multer();
-const { uploadBufferToCloudflare } = require('../utils/cloudflare');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 
 router.post('/', upload.single('invoice'), async (req, res) => {
@@ -12,26 +11,13 @@ router.post('/', upload.single('invoice'), async (req, res) => {
     const body = req.body;
     try {
       if (req.file) {
-        if (process.env.CLOUDINARY_URL) {
-          body.invoice = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
-        } else if (process.env.CF_API_TOKEN) {
-          body.invoice = await uploadBufferToCloudflare(req.file.buffer, req.file.originalname || 'invoice');
-        } else {
-          body.invoice = req.file.buffer.toString('base64');
-        }
+        body.invoice = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
       } else if (body.invoiceBase64) {
-        if (process.env.CLOUDINARY_URL) {
-          const b = Buffer.from(body.invoiceBase64, 'base64');
-          body.invoice = await uploadBufferToCloudinary(b, 'invoice');
-        } else if (process.env.CF_API_TOKEN) {
-          const b = Buffer.from(body.invoiceBase64, 'base64');
-          body.invoice = await uploadBufferToCloudflare(b, 'invoice');
-        } else {
-          body.invoice = body.invoiceBase64;
-        }
+        const b = Buffer.from(body.invoiceBase64, 'base64');
+        body.invoice = await uploadBufferToCloudinary(b, 'invoice');
       }
     } catch (e) {
-      console.error('CDN upload failed for invoice, falling back:', e.message || e);
+      console.error('CDN upload failed:', e.message);
       if (req.file) body.invoice = req.file.buffer.toString('base64');
       else if (body.invoiceBase64) body.invoice = body.invoiceBase64;
     }
@@ -66,14 +52,11 @@ router.put('/:id', upload.single('invoice'), async (req, res) => {
   try {
     const body = req.body;
     try {
-      if (req.file && process.env.CF_API_TOKEN) {
-        const cdnUrl = await uploadBufferToCloudflare(req.file.buffer, req.file.originalname || 'invoice');
-        body.invoice = cdnUrl;
-      } else if (req.file) {
-        body.invoice = req.file.buffer.toString('base64');
+      if (req.file) {
+        body.invoice = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
       }
     } catch (e) {
-      console.error('CDN upload failed for invoice on update, falling back:', e.message || e);
+      console.error('CDN upload failed:', e.message);
       if (req.file) body.invoice = req.file.buffer.toString('base64');
     }
     // Support clearing invoice when client sends invoice == ''
