@@ -13,8 +13,7 @@ const transactionSchema = new mongoose.Schema({
   },
   employee: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    ref: 'User'
   },
   site: {
     type: mongoose.Schema.Types.ObjectId,
