@@ -7,6 +7,15 @@ router.post('/checkin', async (req, res) => {
     const { latitude, longitude, address } = req.body;
     const date = new Date().toISOString().split('T')[0];
     
+    const openAttendance = await Attendance.findOne({
+      user: req.user.id,
+      checkOut: null
+    });
+    
+    if (openAttendance) {
+      return res.status(400).json({ message: 'Please check out first before checking in again' });
+    }
+    
     const attendance = new Attendance({
       user: req.user.id,
       checkIn: new Date(),
@@ -71,6 +80,18 @@ router.get('/today', async (req, res) => {
     }).sort({ checkIn: -1 });
     
     res.json(records);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const attendance = await Attendance.findByIdAndDelete(req.params.id);
+    if (!attendance) {
+      return res.status(404).json({ message: 'Attendance record not found' });
+    }
+    res.json({ message: 'Attendance deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
