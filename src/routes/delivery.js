@@ -11,15 +11,15 @@ router.post('/', upload.single('invoice'), async (req, res) => {
     const body = req.body;
     try {
       if (req.file) {
-        body.invoice = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
+        body.invoiceImage = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
       } else if (body.invoiceBase64) {
         const b = Buffer.from(body.invoiceBase64, 'base64');
-        body.invoice = await uploadBufferToCloudinary(b, 'invoice');
+        body.invoiceImage = await uploadBufferToCloudinary(b, 'invoice');
       }
     } catch (e) {
       console.error('CDN upload failed:', e.message);
-      if (req.file) body.invoice = req.file.buffer.toString('base64');
-      else if (body.invoiceBase64) body.invoice = body.invoiceBase64;
+      if (req.file) body.invoiceImage = req.file.buffer.toString('base64');
+      else if (body.invoiceBase64) body.invoiceImage = body.invoiceBase64;
     }
     const d = new Delivery(body);
     await d.save();
@@ -53,18 +53,17 @@ router.put('/:id', upload.single('invoice'), async (req, res) => {
     const body = req.body;
     try {
       if (req.file) {
-        body.invoice = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
+        body.invoiceImage = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
       }
     } catch (e) {
       console.error('CDN upload failed:', e.message);
-      if (req.file) body.invoice = req.file.buffer.toString('base64');
+      if (req.file) body.invoiceImage = req.file.buffer.toString('base64');
     }
-    // Support clearing invoice when client sends invoice == ''
-    const shouldClearInvoice = typeof body.invoice === 'string' && body.invoice === '';
-    if (shouldClearInvoice) delete body.invoice;
+    const shouldClearInvoice = typeof body.invoiceImage === 'string' && body.invoiceImage === '';
+    if (shouldClearInvoice) delete body.invoiceImage;
     const updateOps = {};
     if (Object.keys(body).length) updateOps['$set'] = body;
-    if (shouldClearInvoice) updateOps['$unset'] = { invoice: '' };
+    if (shouldClearInvoice) updateOps['$unset'] = { invoiceImage: '' };
     const updated = await Delivery.findByIdAndUpdate(req.params.id, updateOps, { new: true });
     res.json(updated);
   } catch (err) {
