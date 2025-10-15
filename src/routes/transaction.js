@@ -78,6 +78,55 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
+router.put('/:id', authMiddleware, async (req, res) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id);
+    if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
+
+    const { type, employee, site, item, quantity, returnDetails, relatedTo } = req.body;
+
+    const oldInventory = await Inventory.findById(transaction.item);
+    if (oldInventory) {
+      if (transaction.type === 'ISSUE') {
+        oldInventory.currentStock += transaction.quantity;
+      } else if (transaction.type === 'RETURN') {
+        oldInventory.currentStock -= transaction.quantity;
+      }
+      await oldInventory.save();
+    }
+
+    const newInventory = await Inventory.findById(item);
+    if (!newInventory) return res.status(404).json({ error: 'Item not found' });
+
+    if (type === 'ISSUE') {
+      if (newInventory.currentStock < quantity) {
+        return res.status(400).json({ error: 'Insufficient stock' });
+      }
+      newInventory.currentStock -= quantity;
+    } else if (type === 'RETURN') {
+      newInventory.currentStock += quantity;
+    }
+    await newInventory.save();
+
+    transaction.type = type;
+    transaction.employee = employee || null;
+    transaction.site = site;
+    transaction.item = item;
+    transaction.quantity = quantity;
+    transaction.returnDetails = returnDetails;
+    transaction.relatedTo = relatedTo;
+
+    await transaction.save();
+    const populated = await Transaction.findById(transaction._id)
+      .populate('employee', 'name email')
+      .populate('site', 'name location')
+      .populate('item', 'name sku');
+    res.json(populated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
