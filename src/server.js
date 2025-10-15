@@ -15,6 +15,7 @@ const deliveryItemRoutes = require('./routes/deliveryItem');
 const uploadsRoutes = require('./routes/uploads');
 const usersRoutes = require('./routes/users');
 const transactionRoutes = require('./routes/transaction');
+const attendanceRoutes = require('./routes/attendance');
 
 const { authMiddleware } = require('./middlewares/auth');
 
@@ -41,6 +42,7 @@ app.use('/api/delivery-items', authMiddleware, deliveryItemRoutes);
 app.use('/api/uploads', authMiddleware, uploadsRoutes);
 app.use('/api/users', authMiddleware, usersRoutes);
 app.use('/api/transactions', authMiddleware, transactionRoutes);
+app.use('/api/attendance', authMiddleware, attendanceRoutes);
 
 const PORT = process.env.PORT || 4000;
 
