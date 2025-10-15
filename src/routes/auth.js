@@ -30,20 +30,24 @@ router.post('/login', async (req, res) => {
     await user.save();
     
     const token = jwt.sign({ id: user._id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
-    res.json({ 
-      token, 
-      user: { 
-        _id: user._id,
-        id: user._id, 
-        username: user.username, 
-        name: user.name,
-        fullName: user.fullName,
-        role: user.role,
-        email: user.email,
-        profilePictureUrl: user.profilePictureUrl,
-        isActive: user.isActive
-      } 
-    });
+    const userObj = user.toObject();
+    delete userObj.password;
+    res.json({ token, user: { ...userObj, id: user._id } });
+  } catch (err) {
+    res.status(400).json({ message: 'Error', error: err.message });
+  }
+});
+
+router.get('/profile', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'No token provided' });
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    res.json(user);
   } catch (err) {
     res.status(400).json({ message: 'Error', error: err.message });
   }

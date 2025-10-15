@@ -15,6 +15,7 @@ const siteRoutes = require('./routes/site');
 const deliveryRoutes = require('./routes/delivery');
 const deliveryItemRoutes = require('./routes/deliveryItem');
 const uploadsRoutes = require('./routes/uploads');
+const usersRoutes = require('./routes/users');
 
 const { authMiddleware } = require('./middlewares/auth');
 
@@ -34,15 +35,14 @@ if (process.env.NODE_ENV === 'production') {
 app.use('/api/auth', authRoutes);
 
 // protect the rest
-app.use('/api', authMiddleware);
-
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/transactions', transactionRoutes);
-app.use('/api/transaction-items', transactionItemRoutes);
-app.use('/api/sites', siteRoutes);
-app.use('/api/deliveries', deliveryRoutes);
-app.use('/api/delivery-items', deliveryItemRoutes);
-app.use('/api/uploads', uploadsRoutes);
+app.use('/api/inventory', authMiddleware, inventoryRoutes);
+app.use('/api/transactions', authMiddleware, transactionRoutes);
+app.use('/api/transaction-items', authMiddleware, transactionItemRoutes);
+app.use('/api/sites', authMiddleware, siteRoutes);
+app.use('/api/deliveries', authMiddleware, deliveryRoutes);
+app.use('/api/delivery-items', authMiddleware, deliveryItemRoutes);
+app.use('/api/uploads', authMiddleware, uploadsRoutes);
+app.use('/api/users', authMiddleware, usersRoutes);
 
 const PORT = process.env.PORT || 4000;
 
