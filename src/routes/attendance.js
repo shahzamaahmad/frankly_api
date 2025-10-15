@@ -59,7 +59,6 @@ router.get('/', async (req, res) => {
     
     if (date) query.date = date;
     if (userId) query.user = userId;
-    else query.user = req.user.id;
     
     const records = await Attendance.find(query)
       .populate('user', 'fullName username')
