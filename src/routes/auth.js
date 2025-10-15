@@ -4,14 +4,33 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 
+router.post('/generate-username', async (req, res) => {
+  try {
+    const { firstName, lastName } = req.body;
+    const username = User.generateUsername(firstName, lastName);
+    const exists = await User.checkUsernameExists(username);
+    res.json({ username, exists });
+  } catch (err) {
+    res.status(400).json({ message: 'Error', error: err.message });
+  }
+});
+
 router.post('/signup', async (req, res) => {
   try {
-    const user = new User(req.body);
+    const userData = { ...req.body };
+    if (!userData.username) {
+      return res.status(400).json({ message: 'Username is required' });
+    }
+    const exists = await User.checkUsernameExists(userData.username);
+    if (exists) {
+      return res.status(400).json({ message: 'Username already exists' });
+    }
+    const user = new User(userData);
     if (req.body.firstName && req.body.lastName && !req.body.fullName) {
       user.fullName = `${req.body.firstName} ${req.body.lastName}`;
     }
     await user.save();
-    res.status(201).json({ message: 'User created' });
+    res.status(201).json({ message: 'User created', username: user.username });
   } catch (err) {
     res.status(400).json({ message: 'Error', error: err.message });
   }

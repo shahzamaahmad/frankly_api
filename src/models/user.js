@@ -4,7 +4,6 @@ const bcrypt = require('bcrypt');
 const SALT_ROUNDS = 10;
 
 const UserSchema = new mongoose.Schema({
-  userId: { type: String, unique: true, sparse: true },
   email: { type: String, unique: true, sparse: true },
   phone: { type: String },
   username: { type: String, required: true, unique: true },
@@ -46,6 +45,29 @@ UserSchema.pre('save', async function (next) {
   this.password = hash;
   next();
 });
+
+UserSchema.statics.generateUsername = function(firstName, lastName) {
+  let baseUsername = '';
+  if (firstName && lastName) {
+    baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`;
+  } else if (lastName) {
+    baseUsername = lastName.toLowerCase();
+  } else if (firstName) {
+    baseUsername = firstName.toLowerCase();
+  } else {
+    baseUsername = 'user';
+  }
+  baseUsername = baseUsername.replace(/[^a-z0-9]/g, '');
+  if (baseUsername.length > 8) {
+    baseUsername = baseUsername.substring(0, 8);
+  }
+  return baseUsername;
+};
+
+UserSchema.statics.checkUsernameExists = async function(username) {
+  const user = await this.findOne({ username });
+  return !!user;
+};
 
 UserSchema.methods.comparePassword = function (candidate) {
   const bcrypt = require('bcrypt');

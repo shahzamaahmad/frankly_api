@@ -27,10 +27,19 @@ router.put('/:id', async (req, res) => {
     if (updates.firstName && updates.lastName && !updates.fullName) {
       updates.fullName = `${updates.firstName} ${updates.lastName}`;
     }
-    delete updates.password;
-    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true }).select('-password');
+    const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    res.json(user);
+    
+    if (updates.password) {
+      user.password = updates.password;
+      delete updates.password;
+    }
+    Object.assign(user, updates);
+    await user.save();
+    
+    const userObj = user.toObject();
+    delete userObj.password;
+    res.json(userObj);
   } catch (err) {
     res.status(400).json({ message: 'Error', error: err.message });
   }
