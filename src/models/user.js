@@ -17,7 +17,7 @@ const UserSchema = new mongoose.Schema({
   emergencyContact: { type: String },
   country: { type: String },
 
-  role: { type: String, enum: ['admin', 'storekeeper', 'engineer', 'driver', 'emp', 'labor',], default: 'emp' },
+  role: { type: String, default: 'emp' },
   isActive: { type: Boolean, default: true },
 
   permissions: {

@@ -12,18 +12,15 @@ const SiteSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  location: {
-    address: String,
-    city: { type: String, default: "Dubai" },
-    emirate: {
-      type: String,
-      enum: ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'],
-      default: "Dubai"
-    },
-    coordinates: {
-      type: { type: String, default: 'Point' },
-      coordinates: [Number]
-    }
+  city: { type: String, default: "Dubai" },
+  emirate: {
+    type: String,
+    enum: ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'],
+    default: "Dubai"
+  },
+  coordinates: {
+    type: { type: String, default: 'Point' },
+    coordinates: [Number]
   },
   client: {
     name: { type: String, required: true },
@@ -104,7 +101,5 @@ SiteSchema.pre('save', function (next) {
   this.updatedAt = new Date();
   next();
 });
-
-SiteSchema.index({ "location.coordinates": "2dsphere" });
 
 module.exports = mongoose.model('Site', SiteSchema);
