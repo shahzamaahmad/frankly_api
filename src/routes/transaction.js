@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Transaction = require('../models/transaction');
 const Inventory = require('../models/inventory');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware } = require('../middlewares/auth');
 
 router.get('/', authMiddleware, async (req, res) => {
   try {
