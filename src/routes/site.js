@@ -15,7 +15,10 @@ router.post('/', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
-    const list = await Site.find();
+    const list = await Site.find()
+      .populate('engineer', 'username fullName')
+      .populate('siteManager', 'username fullName')
+      .populate('safetyOfficer', 'username fullName');
     res.json(list);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -24,7 +27,10 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const item = await Site.findById(req.params.id);
+    const item = await Site.findById(req.params.id)
+      .populate('engineer', 'username fullName')
+      .populate('siteManager', 'username fullName')
+      .populate('safetyOfficer', 'username fullName');
     if (!item) return res.status(404).json({ message: 'Not found' });
     res.json(item);
   } catch (err) {
@@ -34,7 +40,10 @@ router.get('/:id', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const updated = await Site.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updated = await Site.findByIdAndUpdate(req.params.id, req.body, { new: true })
+      .populate('engineer', 'username fullName')
+      .populate('siteManager', 'username fullName')
+      .populate('safetyOfficer', 'username fullName');
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
