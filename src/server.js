@@ -9,7 +9,6 @@ const logger = require('./utils/logger');
 
 const authRoutes = require('./routes/auth');
 const inventoryRoutes = require('./routes/inventory');
-const transactionItemRoutes = require('./routes/transactionItem');
 const siteRoutes = require('./routes/site');
 const deliveryRoutes = require('./routes/delivery');
 const deliveryItemRoutes = require('./routes/deliveryItem');
@@ -35,7 +34,6 @@ app.use('/api/auth', authRoutes);
 
 // protect the rest
 app.use('/api/inventory', authMiddleware, inventoryRoutes);
-app.use('/api/transaction-items', authMiddleware, transactionItemRoutes);
 app.use('/api/sites', authMiddleware, siteRoutes);
 app.use('/api/deliveries', authMiddleware, deliveryRoutes);
 app.use('/api/delivery-items', authMiddleware, deliveryItemRoutes);
