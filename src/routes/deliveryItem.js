@@ -7,15 +7,22 @@ const Inventory = require('../models/inventory');
 router.post('/', async (req, res) => {
   try {
     const body = req.body;
-    if (body.itemSku) {
-      const item = await Inventory.findOne({ sku: body.itemSku });
-      if (!item) return res.status(400).json({ message: 'Inventory item not found' });
-      body.item = item._id;
-      delete body.itemSku;
+    const isArray = Array.isArray(body);
+    const items = isArray ? body : [body];
+    
+    const results = [];
+    for (const item of items) {
+      if (item.itemSku) {
+        const invItem = await Inventory.findOne({ sku: item.itemSku });
+        if (!invItem) return res.status(400).json({ message: 'Inventory item not found' });
+        item.itemName = invItem._id;
+        delete item.itemSku;
+      }
+      const di = new DeliveryItem(item);
+      await di.save();
+      results.push(di);
     }
-    const di = new DeliveryItem(body);
-    await di.save();
-    res.status(201).json(di);
+    res.status(201).json(isArray ? results : results[0]);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

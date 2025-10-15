@@ -4,19 +4,26 @@ const router = express.Router();
 const TransactionItem = require('../models/transactionItem');
 const Inventory = require('../models/inventory');
 
-// Create transaction item - connect item from inventory by sku or id
+// Create transaction item(s) - supports single or bulk insert
 router.post('/', async (req, res) => {
   try {
     const body = req.body;
-    if (body.itemSku) {
-      const item = await Inventory.findOne({ sku: body.itemSku });
-      if (!item) return res.status(400).json({ message: 'Inventory item not found' });
-      body.item = item._id;
-      delete body.itemSku;
+    const isArray = Array.isArray(body);
+    const items = isArray ? body : [body];
+    
+    const results = [];
+    for (const item of items) {
+      if (item.itemSku) {
+        const invItem = await Inventory.findOne({ sku: item.itemSku });
+        if (!invItem) return res.status(400).json({ message: 'Inventory item not found' });
+        item.itemName = invItem._id;
+        delete item.itemSku;
+      }
+      const ti = new TransactionItem(item);
+      await ti.save();
+      results.push(ti);
     }
-    const ti = new TransactionItem(body);
-    await ti.save();
-    res.status(201).json(ti);
+    res.status(201).json(isArray ? results : results[0]);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
