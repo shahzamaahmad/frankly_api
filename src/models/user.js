@@ -16,6 +16,7 @@ const UserSchema = new mongoose.Schema({
   profilePictureUrl: { type: String },
   emergencyContact: { type: String },
   country: { type: String },
+  dateOfBirth: { type: Date },
 
   role: { type: String, default: 'emp' },
   isActive: { type: Boolean, default: true },

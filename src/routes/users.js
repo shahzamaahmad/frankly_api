@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/user');
+const checkPermission = require('../middlewares/checkPermission');
 
-router.get('/', async (req, res) => {
+router.get('/', checkPermission('viewEmployees'), async (req, res) => {
   try {
     const users = await User.find().select('-password');
     res.json(users);
@@ -11,7 +12,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', checkPermission('viewEmployees'), async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -21,7 +22,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
   try {
     const updates = { ...req.body };
     if (updates.firstName && updates.lastName && !updates.fullName) {
@@ -45,7 +46,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });

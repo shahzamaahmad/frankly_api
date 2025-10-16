@@ -2,8 +2,9 @@
 const express = require('express');
 const router = express.Router();
 const Site = require('../models/site');
+const checkPermission = require('../middlewares/checkPermission');
 
-router.post('/', async (req, res) => {
+router.post('/', checkPermission('addSites'), async (req, res) => {
   try {
     const s = new Site(req.body);
     await s.save();
@@ -13,7 +14,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.get('/', async (req, res) => {
+router.get('/', checkPermission('viewSites'), async (req, res) => {
   try {
     const list = await Site.find()
       .populate('engineer', 'username fullName')
@@ -25,7 +26,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', checkPermission('viewSites'), async (req, res) => {
   try {
     const item = await Site.findById(req.params.id)
       .populate('engineer', 'username fullName')
@@ -38,7 +39,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', checkPermission('editSites'), async (req, res) => {
   try {
     const updated = await Site.findByIdAndUpdate(req.params.id, req.body, { new: true })
       .populate('engineer', 'username fullName')
@@ -50,7 +51,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', checkPermission('deleteSites'), async (req, res) => {
   try {
     await Site.findByIdAndDelete(req.params.id);
     res.json({ message: 'Deleted' });

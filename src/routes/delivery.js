@@ -5,8 +5,9 @@ const Delivery = require('../models/delivery');
 const multer = require('multer');
 const upload = multer();
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
+const checkPermission = require('../middlewares/checkPermission');
 
-router.post('/', upload.single('invoice'), async (req, res) => {
+router.post('/', checkPermission('addDeliveries'), upload.single('invoice'), async (req, res) => {
   try {
     const body = req.body;
     try {
@@ -29,7 +30,7 @@ router.post('/', upload.single('invoice'), async (req, res) => {
   }
 });
 
-router.get('/', async (req, res) => {
+router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
   try {
     const list = await Delivery.find();
     res.json(list);
@@ -38,7 +39,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', checkPermission('viewDeliveries'), async (req, res) => {
   try {
     const item = await Delivery.findById(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
@@ -48,7 +49,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.put('/:id', upload.single('invoice'), async (req, res) => {
+router.put('/:id', checkPermission('editDeliveries'), upload.single('invoice'), async (req, res) => {
   try {
     const body = req.body;
     try {
@@ -71,7 +72,7 @@ router.put('/:id', upload.single('invoice'), async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
   try {
     await Delivery.findByIdAndDelete(req.params.id);
     res.json({ message: 'Deleted' });

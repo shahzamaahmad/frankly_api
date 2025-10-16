@@ -5,9 +5,10 @@ const Inventory = require('../models/inventory');
 const multer = require('multer');
 const upload = multer();
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
+const checkPermission = require('../middlewares/checkPermission');
 
 // Create inventory (with optional image upload - base64/binary)
-router.post('/', upload.single('image'), async (req, res) => {
+router.post('/', checkPermission('addInventory'), upload.single('image'), async (req, res) => {
   try {
     const data = req.body;
     try {
@@ -31,7 +32,7 @@ router.post('/', upload.single('image'), async (req, res) => {
 });
 
 // Get all (with optional filters)
-router.get('/', async (req, res) => {
+router.get('/', checkPermission('viewInventory'), async (req, res) => {
   try {
     const filters = {};
     if (req.query.type) filters.type = req.query.type;
@@ -44,7 +45,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get single
-router.get('/:id', async (req, res) => {
+router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
   try {
     const inv = await Inventory.findById(req.params.id);
     if (!inv) return res.status(404).json({ message: 'Not found' });
@@ -55,7 +56,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Update (PUT)
-router.put('/:id', upload.single('image'), async (req, res) => {
+router.put('/:id', checkPermission('editInventory'), upload.single('image'), async (req, res) => {
   try {
     const data = req.body;
     try {
@@ -83,7 +84,7 @@ router.put('/:id', upload.single('image'), async (req, res) => {
 });
 
 // Patch
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', checkPermission('editInventory'), async (req, res) => {
   try {
     const updated = await Inventory.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(updated);
@@ -93,7 +94,7 @@ router.patch('/:id', async (req, res) => {
 });
 
 // Delete
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', checkPermission('deleteInventory'), async (req, res) => {
   try {
     await Inventory.findByIdAndDelete(req.params.id);
     res.json({ message: 'Deleted' });
