@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const Log = require('../models/log');
-const authenticate = require('../middlewares/authenticate');
+const { authMiddleware } = require('../middlewares/auth');
 
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Admin only' });
