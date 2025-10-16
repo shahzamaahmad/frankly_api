@@ -102,4 +102,7 @@ SiteSchema.pre('save', function (next) {
   next();
 });
 
+SiteSchema.index({ siteName: 1 });
+SiteSchema.index({ status: 1 });
+
 module.exports = mongoose.model('Site', SiteSchema);

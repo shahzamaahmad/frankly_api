@@ -5,7 +5,7 @@ const InventorySchema = new mongoose.Schema({
   sku: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   initialStock: { type: Number, default: 0 },
-  currentStock: { type: Number, default: 0 },
+  currentStock: { type: Number, default: 0, min: 0 },
   description: { type: String },
   remark: { type: String },
   category: { type: String },
@@ -42,5 +42,9 @@ const InventorySchema = new mongoose.Schema({
   imageUrl: { type: String },
   barcode: { type: String }
 }, { timestamps: true });
+
+InventorySchema.index({ name: 1 });
+InventorySchema.index({ category: 1 });
+InventorySchema.index({ status: 1 });
 
 module.exports = mongoose.model('Inventory', InventorySchema);

@@ -9,10 +9,18 @@ const NotificationSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 NotificationSchema.pre('save', function(next) {
-  if (!this.expiryDate) {
-    this.expiryDate = new Date(this.sendingDate.getTime() + 2 * 24 * 60 * 60 * 1000);
+  try {
+    if (!this.expiryDate) {
+      this.expiryDate = new Date(this.sendingDate.getTime() + 2 * 24 * 60 * 60 * 1000);
+    }
+    return next();
+  } catch (err) {
+    console.error('Notification pre-save error:', err);
+    return next(err);
   }
-  next();
 });
+
+NotificationSchema.index({ expiryDate: 1 });
+NotificationSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Notification', NotificationSchema);

@@ -12,26 +12,31 @@ router.post('/', async (req, res) => {
     
     const results = [];
     for (const item of items) {
+      if (!item.deliveryId || (!item.itemName && !item.itemSku) || !item.quantity || item.quantity <= 0) {
+        return res.status(400).json({ error: 'Delivery ID, item, and valid quantity are required' });
+      }
+      
       if (item.itemSku) {
         const invItem = await Inventory.findOne({ sku: item.itemSku });
-        if (!invItem) return res.status(400).json({ message: 'Inventory item not found' });
+        if (!invItem) return res.status(400).json({ error: 'Inventory item not found' });
         item.itemName = invItem._id;
         delete item.itemSku;
       }
-      const di = new DeliveryItem(item);
+      const di = new DeliveryItem({ deliveryId: item.deliveryId, itemName: item.itemName, quantity: item.quantity, receivedQuantity: item.receivedQuantity });
       await di.save();
       results.push(di);
     }
     res.status(201).json(isArray ? results : results[0]);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('DeliveryItem creation error:', err);
+    res.status(400).json({ error: 'Failed to create delivery item' });
   }
 });
 
 router.get('/', async (req, res) => {
   try {
     const filter = {};
-    if (req.query.deliveryId) filter.deliveryId = req.query.deliveryId;
+    if (req.query.deliveryId && typeof req.query.deliveryId === 'string') filter.deliveryId = req.query.deliveryId;
     const list = await DeliveryItem.find(filter).populate('itemName').populate('deliveryId');
     res.json(list);
   } catch (err) {
@@ -51,19 +56,31 @@ router.get('/:id', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const updated = await DeliveryItem.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (req.body.quantity !== undefined && req.body.quantity <= 0) {
+      return res.status(400).json({ error: 'Quantity must be greater than 0' });
+    }
+    const updates = {};
+    if (req.body.quantity !== undefined) updates.quantity = req.body.quantity;
+    if (req.body.receivedQuantity !== undefined) updates.receivedQuantity = req.body.receivedQuantity;
+    const updated = await DeliveryItem.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Delivery item not found' });
     res.json(updated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('DeliveryItem update error:', err);
+    res.status(400).json({ error: 'Failed to update delivery item' });
   }
 });
 
 router.delete('/:id', async (req, res) => {
   try {
-    await DeliveryItem.findByIdAndDelete(req.params.id);
+    const item = await DeliveryItem.findByIdAndDelete(req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: 'Delivery item not found' });
+    }
     res.json({ message: 'Deleted' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('DeliveryItem deletion error:', err);
+    res.status(400).json({ error: 'Failed to delete delivery item' });
   }
 });
 

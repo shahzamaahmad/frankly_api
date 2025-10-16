@@ -29,13 +29,22 @@ fs.createReadStream('del.csv')
       invoice: data['Invoice']
     });
   })
+  .on('error', (err) => {
+    console.error('CSV read error:', err);
+    process.exit(1);
+  })
   .on('end', async () => {
     try {
-      await Deliveries.insertMany(results);
+      if (results.length === 0) {
+        console.log('No data to import');
+        process.exit(0);
+        return;
+      }
+      await Deliveries.insertMany(results, { ordered: false });
       console.log('Data imported successfully for deliveries');
       process.exit(0);
     } catch (err) {
-      console.error(err);
+      console.error('Import error:', err.message);
       process.exit(1);
     }
   });

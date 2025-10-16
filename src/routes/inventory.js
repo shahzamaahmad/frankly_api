@@ -3,14 +3,38 @@ const express = require('express');
 const router = express.Router();
 const Inventory = require('../models/inventory');
 const multer = require('multer');
-const upload = multer();
+const upload = multer({
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp'];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type'));
+    }
+  }
+});
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
 
 // Create inventory (with optional image upload - base64/binary)
-router.post('/', checkPermission('addInventory'), upload.single('image'), async (req, res) => {
+router.post('/', checkPermission('addInventory'), (req, res, next) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
   try {
     const data = req.body;
+    
+    if (!data.itemName || !data.sku || !data.category) {
+      return res.status(400).json({ error: 'Item name, SKU, and category are required' });
+    }
+    
+    if (data.currentStock !== undefined && data.currentStock < 0) {
+      return res.status(400).json({ error: 'Stock cannot be negative' });
+    }
+    
     try {
       if (req.file) {
         data.image = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'image');
@@ -27,7 +51,8 @@ router.post('/', checkPermission('addInventory'), upload.single('image'), async 
     await inv.save();
     res.status(201).json(inv);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Create inventory error:', err);
+    res.status(400).json({ error: 'Failed to create inventory item' });
   }
 });
 
@@ -35,12 +60,13 @@ router.post('/', checkPermission('addInventory'), upload.single('image'), async 
 router.get('/', checkPermission('viewInventory'), async (req, res) => {
   try {
     const filters = {};
-    if (req.query.type) filters.type = req.query.type;
-    if (req.query.origin) filters.origin = req.query.origin;
+    if (req.query.type && typeof req.query.type === 'string') filters.type = req.query.type;
+    if (req.query.origin && typeof req.query.origin === 'string') filters.origin = req.query.origin;
     const list = await Inventory.find(filters);
     res.json(list);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Get inventory error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -48,15 +74,21 @@ router.get('/', checkPermission('viewInventory'), async (req, res) => {
 router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
   try {
     const inv = await Inventory.findById(req.params.id);
-    if (!inv) return res.status(404).json({ message: 'Not found' });
+    if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
     res.json(inv);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Get inventory item error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Update (PUT)
-router.put('/:id', checkPermission('editInventory'), upload.single('image'), async (req, res) => {
+router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
   try {
     const data = req.body;
     try {
@@ -77,29 +109,43 @@ router.put('/:id', checkPermission('editInventory'), upload.single('image'), asy
     if (Object.keys(data).length) updateOps['$set'] = data;
     if (shouldClearImage) updateOps['$unset'] = { image: '' };
     const updated = await Inventory.findByIdAndUpdate(req.params.id, updateOps, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
     res.json(updated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Update inventory error:', err);
+    res.status(400).json({ error: 'Failed to update inventory item' });
   }
 });
 
 // Patch
 router.patch('/:id', checkPermission('editInventory'), async (req, res) => {
   try {
-    const updated = await Inventory.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const allowedFields = ['currentStock', 'status', 'remark'];
+    const updates = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    }
+    const updated = await Inventory.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
     res.json(updated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Patch inventory error:', err);
+    res.status(400).json({ error: 'Failed to update inventory item' });
   }
 });
 
 // Delete
 router.delete('/:id', checkPermission('deleteInventory'), async (req, res) => {
   try {
+    const item = await Inventory.findById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
     await Inventory.findByIdAndDelete(req.params.id);
     res.json({ message: 'Deleted' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Delete inventory error:', err);
+    res.status(400).json({ error: 'Failed to delete inventory item' });
   }
 });
 

@@ -16,36 +16,47 @@ const rows = [];
 fs.createReadStream('deli.csv')
   .pipe(csv())
   .on('data', (row) => rows.push(row))
+  .on('error', (err) => {
+    console.error('CSV read error:', err);
+    process.exit(1);
+  })
   .on('end', async () => {
-    for (const row of rows) {
-      try {
-        // Lookup Delivery ObjectId
-        const delivery = await Delivery.findOne({ deliveryId: row.deliveryId }); // your custom ID field
-        if (!delivery) {
-          console.error(`Delivery not found for ID: ${row.deliveryId}`);
-          continue;
-        }
-
-        // Lookup Inventory ObjectId
-        const inventoryItem = await Inventory.findOne({ sku: row.itemName }); // your SKU/Item field
-        if (!inventoryItem) {
-          console.error(`Inventory not found for SKU: ${row.itemName}`);
-          continue;
-        }
-
-        // Create DeliveryItem with ObjectId references
-        await DeliveryItem.create({
-          deliveryId: delivery._id,
-          itemName: inventoryItem._id,
-          quantity: row.quantity,  // adjust if you have more fields
-        });
-
-        console.log(`Imported item: ${row.itemName} for delivery: ${row.deliveryId}`);
-
-      } catch (err) {
-        console.error('Error importing row:', row, err.message);
+    try {
+      if (rows.length === 0) {
+        console.log('No data to import');
+        process.exit(0);
+        return;
       }
+      for (const row of rows) {
+        try {
+          const delivery = await Delivery.findOne({ deliveryId: row.deliveryId });
+          if (!delivery) {
+            console.error(`Delivery not found for ID: ${row.deliveryId}`);
+            continue;
+          }
+
+          const inventoryItem = await Inventory.findOne({ sku: row.itemName });
+          if (!inventoryItem) {
+            console.error(`Inventory not found for SKU: ${row.itemName}`);
+            continue;
+          }
+
+          await DeliveryItem.create({
+            deliveryId: delivery._id,
+            itemName: inventoryItem._id,
+            quantity: row.quantity
+          });
+
+          console.log(`Imported item: ${row.itemName} for delivery: ${row.deliveryId}`);
+
+        } catch (err) {
+          console.error('Error importing row:', err.message);
+        }
+      }
+      console.log('Import finished!');
+      process.exit(0);
+    } catch (err) {
+      console.error('Import error:', err.message);
+      process.exit(1);
     }
-    console.log('Import finished!');
-    process.exit();
   });

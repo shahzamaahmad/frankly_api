@@ -10,8 +10,8 @@ router.get('/', authMiddleware, checkPermission('viewTransactions'), async (req,
   try {
     const { site, item } = req.query;
     const filter = {};
-    if (site) filter.site = site;
-    if (item) filter.item = item;
+    if (site && typeof site === 'string') filter.site = site;
+    if (item && typeof item === 'string') filter.item = item;
     
     const transactions = await Transaction.find(filter)
       .populate('employee', 'fullName username email')
@@ -20,7 +20,8 @@ router.get('/', authMiddleware, checkPermission('viewTransactions'), async (req,
       .sort({ timestamp: -1 });
     res.json(transactions);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Get transactions error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -33,13 +34,18 @@ router.get('/:id', authMiddleware, checkPermission('viewTransactions'), async (r
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
     res.json(transaction);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Get transaction error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 router.post('/', authMiddleware, checkPermission('addTransactions'), async (req, res) => {
   try {
     const { type, employee, site, item, quantity, returnDetails, relatedTo } = req.body;
+    
+    if (!type || !site || !item || !quantity || quantity <= 0) {
+      return res.status(400).json({ error: 'Invalid input data' });
+    }
     
     const inventory = await Inventory.findById(item);
     if (!inventory) return res.status(404).json({ error: 'Item not found' });
@@ -84,7 +90,8 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
     
     res.status(201).json(populated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Create transaction error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -94,6 +101,10 @@ router.put('/:id', authMiddleware, checkPermission('editTransactions'), async (r
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
     const { type, employee, site, item, quantity, returnDetails, relatedTo } = req.body;
+    
+    if (!type || !site || !item || !quantity || quantity <= 0) {
+      return res.status(400).json({ error: 'Invalid input data' });
+    }
 
     const oldInventory = await Inventory.findById(transaction.item);
     if (oldInventory) {
@@ -136,7 +147,8 @@ router.put('/:id', authMiddleware, checkPermission('editTransactions'), async (r
     
     res.json(populated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Update transaction error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -160,7 +172,8 @@ router.delete('/:id', authMiddleware, checkPermission('deleteTransactions'), asy
     await Transaction.findByIdAndDelete(req.params.id);
     res.json({ message: 'Transaction deleted' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Delete transaction error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

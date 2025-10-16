@@ -72,9 +72,14 @@ const UserSchema = new mongoose.Schema({
 
 UserSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
-  const hash = await bcrypt.hash(this.password, SALT_ROUNDS);
-  this.password = hash;
-  next();
+  try {
+    const hash = await bcrypt.hash(this.password, SALT_ROUNDS);
+    this.password = hash;
+    return next();
+  } catch (err) {
+    console.error('Password hashing error:', err);
+    return next(err);
+  }
 });
 
 UserSchema.statics.generateUsername = function (firstName, lastName) {
@@ -98,9 +103,13 @@ UserSchema.statics.checkUsernameExists = async function (username) {
   return !!user;
 };
 
-UserSchema.methods.comparePassword = function (candidate) {
-  const bcrypt = require('bcrypt');
-  return bcrypt.compare(candidate, this.password);
+UserSchema.methods.comparePassword = async function (candidate) {
+  try {
+    return await bcrypt.compare(candidate, this.password);
+  } catch (err) {
+    console.error('Password comparison error:', err);
+    return false;
+  }
 }
 
 module.exports = mongoose.model('User', UserSchema);

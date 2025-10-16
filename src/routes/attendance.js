@@ -6,6 +6,11 @@ const { createLog } = require('../utils/logger');
 router.post('/checkin', async (req, res) => {
   try {
     const { latitude, longitude, address, date, siteId } = req.body;
+    
+    if (!latitude || !longitude || !address) {
+      return res.status(400).json({ message: 'Location data is required' });
+    }
+    
     const recordDate = date || new Date().toISOString().split('T')[0];
     
     const openAttendance = await Attendance.findOne({
@@ -29,13 +34,19 @@ router.post('/checkin', async (req, res) => {
     await createLog('CHECKIN', req.user.id, req.user.username, `Checked in at ${address || 'unknown location'}`);
     res.status(201).json(attendance);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Check-in error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
 router.put('/checkout/:id', async (req, res) => {
   try {
     const { latitude, longitude, address, siteId } = req.body;
+    
+    if (!latitude || !longitude || !address) {
+      return res.status(400).json({ message: 'Location data is required' });
+    }
+    
     const attendance = await Attendance.findById(req.params.id);
     
     if (!attendance) {
@@ -59,7 +70,8 @@ router.put('/checkout/:id', async (req, res) => {
     
     res.json(attendance);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Check-out error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
@@ -68,8 +80,8 @@ router.get('/', async (req, res) => {
     const { date, userId } = req.query;
     const query = {};
     
-    if (date) query.date = date;
-    if (userId) query.user = userId;
+    if (date && typeof date === 'string') query.date = date;
+    if (userId && typeof userId === 'string') query.user = userId;
     
     const records = await Attendance.find(query)
       .populate('user', 'fullName username')
@@ -77,7 +89,8 @@ router.get('/', async (req, res) => {
     
     res.json(records);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Get attendance error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
@@ -86,8 +99,8 @@ router.get('/today', async (req, res) => {
     const date = new Date().toISOString().split('T')[0];
     const records = await Attendance.find({ date, user: req.user.id })
       .populate('user', 'fullName username')
-      .populate('checkInSite', 'name')
-      .populate('checkOutSite', 'name')
+      .populate('checkInSite', 'siteName')
+      .populate('checkOutSite', 'siteName')
       .sort({ checkIn: -1 });
     
     let totalSeconds = 0;
@@ -101,7 +114,8 @@ router.get('/today', async (req, res) => {
     
     res.json({ records, totalWorkingSeconds: totalSeconds });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Get today attendance error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
@@ -114,7 +128,8 @@ router.delete('/:id', async (req, res) => {
     await createLog('DELETE_ATTENDANCE', req.user.id, req.user.username, `Deleted attendance record`);
     res.json({ message: 'Attendance deleted' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Delete attendance error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 

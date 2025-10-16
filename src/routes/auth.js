@@ -12,15 +12,19 @@ router.post('/generate-username', async (req, res) => {
     const exists = await User.checkUsernameExists(username);
     res.json({ username, exists });
   } catch (err) {
-    res.status(400).json({ message: 'Error', error: err.message });
+    console.error('Generate username error:', err);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
 router.post('/signup', async (req, res) => {
   try {
     const userData = { ...req.body };
-    if (!userData.username) {
-      return res.status(400).json({ message: 'Username is required' });
+    if (!userData.username || !userData.password) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
+    if (userData.password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
     const exists = await User.checkUsernameExists(userData.username);
     if (exists) {
@@ -33,13 +37,19 @@ router.post('/signup', async (req, res) => {
     await user.save();
     res.status(201).json({ message: 'User created', username: user.username });
   } catch (err) {
-    res.status(400).json({ message: 'Error', error: err.message });
+    console.error('Signup error:', err);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
+    
     const user = await User.findOne({ username });
     if (!user) return res.status(401).json({ message: 'Invalid credentials' });
     if (!user.isActive) return res.status(403).json({ message: 'Account is deactivated' });
@@ -56,7 +66,8 @@ router.post('/login', async (req, res) => {
     delete userObj.password;
     res.json({ token, user: { ...userObj, id: user._id } });
   } catch (err) {
-    res.status(400).json({ message: 'Error', error: err.message });
+    console.error('Login error:', err);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
@@ -71,7 +82,8 @@ router.get('/profile', async (req, res) => {
     
     res.json(user);
   } catch (err) {
-    res.status(400).json({ message: 'Error', error: err.message });
+    console.error('Profile error:', err);
+    res.status(401).json({ message: 'Unauthorized' });
   }
 });
 
@@ -87,6 +99,10 @@ router.put('/change-password', async (req, res) => {
       return res.status(400).json({ message: 'Current and new password are required' });
     }
     
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters' });
+    }
+    
     const user = await User.findById(decoded.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
@@ -100,7 +116,8 @@ router.put('/change-password', async (req, res) => {
     
     res.json({ message: 'Password changed successfully' });
   } catch (err) {
-    res.status(400).json({ message: 'Error', error: err.message });
+    console.error('Change password error:', err);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 

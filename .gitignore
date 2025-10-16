@@ -1,4 +1,36 @@
-
+# Dependencies
 node_modules/
+
+# Environment variables
 .env
-npm-debug.log
+.env.local
+.env.production
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build
+dist/
+build/
+
+# Uploads (if storing locally)
+uploads/
+
+# CSV import files (may contain sensitive data)
+*.csv
+
+# Database dumps
+*.sql
+*.dump

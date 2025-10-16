@@ -6,11 +6,15 @@ const checkPermission = require('../middlewares/checkPermission');
 
 router.post('/', checkPermission('addSites'), async (req, res) => {
   try {
+    if (!req.body.siteCode || !req.body.siteName || !req.body.engineer) {
+      return res.status(400).json({ error: 'Site code, name, and engineer are required' });
+    }
     const s = new Site(req.body);
     await s.save();
     res.status(201).json(s);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Create site error:', err);
+    res.status(400).json({ error: 'Failed to create site' });
   }
 });
 
@@ -22,7 +26,8 @@ router.get('/', checkPermission('viewSites'), async (req, res) => {
       .populate('safetyOfficer', 'username fullName');
     res.json(list);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Get sites error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -32,31 +37,44 @@ router.get('/:id', checkPermission('viewSites'), async (req, res) => {
       .populate('engineer', 'username fullName')
       .populate('siteManager', 'username fullName')
       .populate('safetyOfficer', 'username fullName');
-    if (!item) return res.status(404).json({ message: 'Not found' });
+    if (!item) return res.status(404).json({ error: 'Site not found' });
     res.json(item);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Get site error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 router.put('/:id', checkPermission('editSites'), async (req, res) => {
   try {
-    const updated = await Site.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    const allowedFields = ['siteCode', 'siteName', 'engineer', 'siteManager', 'safetyOfficer', 'location', 'status', 'description'];
+    const updates = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    }
+    const updated = await Site.findByIdAndUpdate(req.params.id, updates, { new: true })
       .populate('engineer', 'username fullName')
       .populate('siteManager', 'username fullName')
       .populate('safetyOfficer', 'username fullName');
+    if (!updated) return res.status(404).json({ error: 'Site not found' });
     res.json(updated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Update site error:', err);
+    res.status(400).json({ error: 'Failed to update site' });
   }
 });
 
 router.delete('/:id', checkPermission('deleteSites'), async (req, res) => {
   try {
+    const site = await Site.findById(req.params.id);
+    if (!site) {
+      return res.status(404).json({ error: 'Site not found' });
+    }
     await Site.findByIdAndDelete(req.params.id);
     res.json({ message: 'Deleted' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Delete site error:', err);
+    res.status(400).json({ error: 'Failed to delete site' });
   }
 });
 

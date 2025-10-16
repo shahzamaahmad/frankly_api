@@ -8,7 +8,8 @@ router.get('/', checkPermission('viewEmployees'), async (req, res) => {
     const users = await User.find().select('-password');
     res.json(users);
   } catch (err) {
-    res.status(400).json({ message: 'Error', error: err.message });
+    console.error('Get users error:', err);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
@@ -18,13 +19,19 @@ router.get('/:id', checkPermission('viewEmployees'), async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
-    res.status(400).json({ message: 'Error', error: err.message });
+    console.error('Get user error:', err);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
 router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
   try {
     const updates = { ...req.body };
+    
+    if (updates.username && updates.username.length < 3) {
+      return res.status(400).json({ message: 'Username must be at least 3 characters' });
+    }
+    
     if (updates.firstName && updates.lastName && !updates.fullName) {
       updates.fullName = `${updates.firstName} ${updates.lastName}`;
     }
@@ -42,17 +49,23 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
     delete userObj.password;
     res.json(userObj);
   } catch (err) {
-    res.status(400).json({ message: 'Error', error: err.message });
+    console.error('Update user error:', err);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
 router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
   try {
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ message: 'Cannot delete your own account' });
+    }
+    
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json({ message: 'User deleted successfully' });
   } catch (err) {
-    res.status(400).json({ message: 'Error', error: err.message });
+    console.error('Delete user error:', err);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
