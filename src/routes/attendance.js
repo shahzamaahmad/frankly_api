@@ -5,13 +5,14 @@ const { createLog } = require('../utils/logger');
 
 router.post('/checkin', async (req, res) => {
   try {
-    const { latitude, longitude, address, date, siteId } = req.body;
+    const { latitude, longitude, address, date, checkInTime, siteId } = req.body;
     
     if (!latitude || !longitude || !address) {
       return res.status(400).json({ message: 'Location data is required' });
     }
     
-    const recordDate = date || new Date().toISOString().split('T')[0];
+    const recordDate = date;
+    const recordCheckIn = checkInTime ? new Date(checkInTime) : new Date();
     
     const openAttendance = await Attendance.findOne({
       user: req.user.id,
@@ -24,7 +25,7 @@ router.post('/checkin', async (req, res) => {
     
     const attendance = new Attendance({
       user: req.user.id,
-      checkIn: new Date(),
+      checkIn: recordCheckIn,
       checkInLocation: { latitude, longitude, address },
       checkInSite: siteId,
       date: recordDate
@@ -41,7 +42,7 @@ router.post('/checkin', async (req, res) => {
 
 router.put('/checkout/:id', async (req, res) => {
   try {
-    const { latitude, longitude, address, siteId } = req.body;
+    const { latitude, longitude, address, checkOutTime, siteId } = req.body;
     
     if (!latitude || !longitude || !address) {
       return res.status(400).json({ message: 'Location data is required' });
@@ -57,10 +58,10 @@ router.put('/checkout/:id', async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized' });
     }
     
-    const checkOutTime = new Date();
-    const workingHours = Math.floor((checkOutTime - attendance.checkIn) / 1000);
+    const recordCheckOut = checkOutTime ? new Date(checkOutTime) : new Date();
+    const workingHours = Math.floor((recordCheckOut - attendance.checkIn) / 1000);
     
-    attendance.checkOut = checkOutTime;
+    attendance.checkOut = recordCheckOut;
     attendance.checkOutLocation = { latitude, longitude, address };
     attendance.checkOutSite = siteId;
     attendance.workingHours = workingHours;
