@@ -4,8 +4,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const morgan = require('morgan');
-const logger = require('./utils/logger');
 
 const authRoutes = require('./routes/auth');
 const inventoryRoutes = require('./routes/inventory');
@@ -25,13 +23,6 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
-
-// HTTP request logging via morgan -> winston
-if (process.env.NODE_ENV === 'production') {
-  app.use(morgan('combined', { stream: logger.stream }));
-} else {
-  app.use(morgan('dev', { stream: logger.stream }));
-}
 
 // routes that don't need auth
 app.use('/api/auth', authRoutes);
@@ -54,9 +45,9 @@ mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 }).then(() => {
-  logger.info('MongoDB connected');
-  app.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
+  console.log('MongoDB connected');
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }).catch(err => {
-  logger.error('MongoDB connection error: %s', err.message);
+  console.error('MongoDB connection error:', err.message);
   process.exit(1);
 });
