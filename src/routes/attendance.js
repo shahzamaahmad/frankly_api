@@ -11,8 +11,9 @@ router.post('/checkin', async (req, res) => {
       return res.status(400).json({ message: 'Location data is required' });
     }
     
-    const recordDate = date;
     const recordCheckIn = checkInTime ? new Date(checkInTime) : new Date();
+    const recordDate = date || new Date().toISOString().split('T')[0];
+    console.log(`/checkin - Using date: ${recordDate}, checkInTime: ${recordCheckIn}`);
     
     const openAttendance = await Attendance.findOne({
       user: req.user.id,
@@ -32,6 +33,7 @@ router.post('/checkin', async (req, res) => {
     });
     
     await attendance.save();
+    console.log(`/checkin - Saved attendance with date: ${attendance.date}`);
     await createLog('CHECKIN', req.user.id, req.user.username, `Checked in at ${address || 'unknown location'}`);
     res.status(201).json(attendance);
   } catch (error) {
