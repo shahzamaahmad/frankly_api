@@ -5,7 +5,7 @@ const { createLog } = require('../utils/logger');
 
 router.post('/checkin', async (req, res) => {
   try {
-    const { latitude, longitude, address, date } = req.body;
+    const { latitude, longitude, address, date, siteId } = req.body;
     const recordDate = date || new Date().toISOString().split('T')[0];
     
     const openAttendance = await Attendance.findOne({
@@ -21,6 +21,7 @@ router.post('/checkin', async (req, res) => {
       user: req.user.id,
       checkIn: new Date(),
       checkInLocation: { latitude, longitude, address },
+      checkInSite: siteId,
       date: recordDate
     });
     
@@ -34,7 +35,7 @@ router.post('/checkin', async (req, res) => {
 
 router.put('/checkout/:id', async (req, res) => {
   try {
-    const { latitude, longitude, address } = req.body;
+    const { latitude, longitude, address, siteId } = req.body;
     const attendance = await Attendance.findById(req.params.id);
     
     if (!attendance) {
@@ -50,6 +51,7 @@ router.put('/checkout/:id', async (req, res) => {
     
     attendance.checkOut = checkOutTime;
     attendance.checkOutLocation = { latitude, longitude, address };
+    attendance.checkOutSite = siteId;
     attendance.workingHours = workingHours;
     await attendance.save();
     
@@ -84,6 +86,8 @@ router.get('/today', async (req, res) => {
     const date = new Date().toISOString().split('T')[0];
     const records = await Attendance.find({ date, user: req.user.id })
       .populate('user', 'fullName username')
+      .populate('checkInSite', 'name')
+      .populate('checkOutSite', 'name')
       .sort({ checkIn: -1 });
     
     let totalSeconds = 0;
