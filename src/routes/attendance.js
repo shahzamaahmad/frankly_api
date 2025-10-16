@@ -5,7 +5,7 @@ const { createLog } = require('../utils/logger');
 
 router.post('/checkin', async (req, res) => {
   try {
-    const { latitude, longitude, address, date, checkInTime, siteId } = req.body;
+    const { latitude, longitude, address, date, checkInTime } = req.body;
     
     if (!latitude || !longitude || !address) {
       return res.status(400).json({ message: 'Location data is required' });
@@ -28,7 +28,6 @@ router.post('/checkin', async (req, res) => {
       user: req.user.id,
       checkIn: recordCheckIn,
       checkInLocation: { latitude, longitude, address },
-      checkInSite: siteId,
       date: recordDate
     });
     
@@ -44,7 +43,7 @@ router.post('/checkin', async (req, res) => {
 
 router.put('/checkout/:id', async (req, res) => {
   try {
-    const { latitude, longitude, address, checkOutTime, siteId } = req.body;
+    const { latitude, longitude, address, checkOutTime } = req.body;
     
     if (!latitude || !longitude || !address) {
       return res.status(400).json({ message: 'Location data is required' });
@@ -65,7 +64,6 @@ router.put('/checkout/:id', async (req, res) => {
     
     attendance.checkOut = recordCheckOut;
     attendance.checkOutLocation = { latitude, longitude, address };
-    attendance.checkOutSite = siteId;
     attendance.workingHours = workingHours;
     await attendance.save();
     
@@ -103,8 +101,6 @@ router.get('/today', async (req, res) => {
     console.log(`/today - Looking for date: ${date}, user: ${req.user.id}`);
     const records = await Attendance.find({ date, user: req.user.id })
       .populate('user', 'fullName username')
-      .populate('checkInSite', 'siteName')
-      .populate('checkOutSite', 'siteName')
       .sort({ checkIn: -1 });
     console.log(`/today - Found ${records.length} records`);
     for (const r of records) {

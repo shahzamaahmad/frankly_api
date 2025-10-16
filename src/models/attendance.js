@@ -18,18 +18,10 @@ const attendanceSchema = new mongoose.Schema({
     longitude: Number,
     address: String
   },
-  checkInSite: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Site'
-  },
   checkOutLocation: {
     latitude: Number,
     longitude: Number,
     address: String
-  },
-  checkOutSite: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Site'
   },
   workingHours: {
     type: Number,
