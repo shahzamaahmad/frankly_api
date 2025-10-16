@@ -97,7 +97,8 @@ router.get('/', async (req, res) => {
 
 router.get('/today', async (req, res) => {
   try {
-    const date = new Date().toISOString().split('T')[0];
+    const clientDate = req.query.date;
+    const date = clientDate || new Date().toISOString().split('T')[0];
     console.log(`/today - Looking for date: ${date}, user: ${req.user.id}`);
     const records = await Attendance.find({ date, user: req.user.id })
       .populate('user', 'fullName username')
