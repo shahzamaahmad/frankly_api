@@ -109,11 +109,13 @@ router.get('/today', async (req, res) => {
     }
     
     let totalSeconds = 0;
+    const now = new Date();
     for (const record of records) {
       if (record.checkOut) {
         totalSeconds += record.workingHours;
       } else {
-        totalSeconds += Math.floor((new Date() - record.checkIn) / 1000);
+        const elapsed = Math.floor((now - new Date(record.checkIn)) / 1000);
+        totalSeconds += Math.max(0, elapsed);
       }
     }
     
