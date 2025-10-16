@@ -23,6 +23,10 @@ const attendanceSchema = new mongoose.Schema({
     longitude: Number,
     address: String
   },
+  workingHours: {
+    type: Number,
+    default: 0
+  },
   date: {
     type: String,
     required: true

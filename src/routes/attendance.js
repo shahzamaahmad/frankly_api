@@ -33,18 +33,19 @@ router.post('/checkin', async (req, res) => {
 router.put('/checkout/:id', async (req, res) => {
   try {
     const { latitude, longitude, address } = req.body;
-    const attendance = await Attendance.findByIdAndUpdate(
-      req.params.id,
-      {
-        checkOut: new Date(),
-        checkOutLocation: { latitude, longitude, address }
-      },
-      { new: true }
-    );
+    const attendance = await Attendance.findById(req.params.id);
     
     if (!attendance) {
       return res.status(404).json({ message: 'Attendance record not found' });
     }
+    
+    const checkOutTime = new Date();
+    const workingHours = Math.floor((checkOutTime - attendance.checkIn) / 1000);
+    
+    attendance.checkOut = checkOutTime;
+    attendance.checkOutLocation = { latitude, longitude, address };
+    attendance.workingHours = workingHours;
+    await attendance.save();
     
     res.json(attendance);
   } catch (error) {
