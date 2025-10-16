@@ -72,4 +72,31 @@ router.get('/profile', async (req, res) => {
   }
 });
 
+router.put('/change-password', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'No token provided' });
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Current and new password are required' });
+    }
+    
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    const match = await user.comparePassword(currentPassword);
+    if (!match) return res.status(401).json({ message: 'Current password is incorrect' });
+    
+    user.password = newPassword;
+    await user.save();
+    
+    res.json({ message: 'Password changed successfully' });
+  } catch (err) {
+    res.status(400).json({ message: 'Error', error: err.message });
+  }
+});
+
 module.exports = router;
