@@ -16,6 +16,7 @@ const uploadsRoutes = require('./routes/uploads');
 const usersRoutes = require('./routes/users');
 const transactionRoutes = require('./routes/transaction');
 const attendanceRoutes = require('./routes/attendance');
+const notificationRoutes = require('./routes/notification');
 
 const { authMiddleware } = require('./middlewares/auth');
 
@@ -43,6 +44,7 @@ app.use('/api/uploads', authMiddleware, uploadsRoutes);
 app.use('/api/users', authMiddleware, usersRoutes);
 app.use('/api/transactions', authMiddleware, transactionRoutes);
 app.use('/api/attendance', authMiddleware, attendanceRoutes);
+app.use('/api/notifications', authMiddleware, notificationRoutes);
 
 const PORT = process.env.PORT || 4000;
 

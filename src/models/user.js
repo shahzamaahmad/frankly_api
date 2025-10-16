@@ -47,6 +47,8 @@ const UserSchema = new mongoose.Schema({
     viewAttendance: { type: Boolean, default: true },
     editAttendance: { type: Boolean, default: false },
     deleteAttendance: { type: Boolean, default: false },
+    viewNotifications: { type: Boolean, default: false },
+    sendNotifications: { type: Boolean, default: false },
   },
 
   department: { type: String },
