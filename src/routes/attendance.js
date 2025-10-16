@@ -98,11 +98,16 @@ router.get('/', async (req, res) => {
 router.get('/today', async (req, res) => {
   try {
     const date = new Date().toISOString().split('T')[0];
+    console.log(`/today - Looking for date: ${date}, user: ${req.user.id}`);
     const records = await Attendance.find({ date, user: req.user.id })
       .populate('user', 'fullName username')
       .populate('checkInSite', 'siteName')
       .populate('checkOutSite', 'siteName')
       .sort({ checkIn: -1 });
+    console.log(`/today - Found ${records.length} records`);
+    for (const r of records) {
+      console.log(`  Record: date=${r.date}, checkIn=${r.checkIn}, checkOut=${r.checkOut}`);
+    }
     
     let totalSeconds = 0;
     for (const record of records) {
