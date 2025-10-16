@@ -20,10 +20,7 @@ router.get('/', checkPermission('viewNotifications'), async (req, res) => {
   try {
     const now = new Date();
     const notifications = await Notification.find({
-      $or: [
-        { expiryDate: null },
-        { expiryDate: { $gt: now } }
-      ]
+      expiryDate: { $gt: now }
     }).populate('sentBy', 'fullName username').sort({ createdAt: -1 });
     res.json(notifications);
   } catch (err) {

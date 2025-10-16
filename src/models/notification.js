@@ -8,4 +8,11 @@ const NotificationSchema = new mongoose.Schema({
   sentBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });
 
+NotificationSchema.pre('save', function(next) {
+  if (!this.expiryDate) {
+    this.expiryDate = new Date(this.sendingDate.getTime() + 2 * 24 * 60 * 60 * 1000);
+  }
+  next();
+});
+
 module.exports = mongoose.model('Notification', NotificationSchema);

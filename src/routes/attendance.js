@@ -41,6 +41,10 @@ router.put('/checkout/:id', async (req, res) => {
       return res.status(404).json({ message: 'Attendance record not found' });
     }
     
+    if (attendance.user.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+    
     const checkOutTime = new Date();
     const workingHours = Math.floor((checkOutTime - attendance.checkIn) / 1000);
     
@@ -78,11 +82,20 @@ router.get('/', async (req, res) => {
 router.get('/today', async (req, res) => {
   try {
     const date = new Date().toISOString().split('T')[0];
-    const records = await Attendance.find({ date })
+    const records = await Attendance.find({ date, user: req.user.id })
       .populate('user', 'fullName username')
       .sort({ checkIn: -1 });
     
-    res.json(records);
+    let totalSeconds = 0;
+    for (const record of records) {
+      if (record.checkOut) {
+        totalSeconds += record.workingHours;
+      } else {
+        totalSeconds += Math.floor((new Date() - record.checkIn) / 1000);
+      }
+    }
+    
+    res.json({ records, totalWorkingSeconds: totalSeconds });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
