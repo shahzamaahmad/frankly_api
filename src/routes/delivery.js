@@ -2,6 +2,8 @@
 const express = require('express');
 const router = express.Router();
 const Delivery = require('../models/delivery');
+const DeliveryItem = require('../models/deliveryItem');
+const Inventory = require('../models/inventory');
 const multer = require('multer');
 const upload = multer();
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
@@ -24,6 +26,23 @@ router.post('/', checkPermission('addDeliveries'), upload.single('invoice'), asy
     }
     const d = new Delivery(body);
     await d.save();
+
+    if (body.items && Array.isArray(body.items)) {
+      for (const item of body.items) {
+        const deliveryItem = new DeliveryItem({
+          deliveryId: d._id,
+          itemName: item.itemName,
+          quantity: item.quantity
+        });
+        await deliveryItem.save();
+
+        await Inventory.findByIdAndUpdate(
+          item.itemName,
+          { $inc: { currentStock: item.quantity } }
+        );
+      }
+    }
+
     res.status(201).json(d);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -74,6 +93,16 @@ router.put('/:id', checkPermission('editDeliveries'), upload.single('invoice'), 
 
 router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
   try {
+    const deliveryItems = await DeliveryItem.find({ deliveryId: req.params.id });
+    
+    for (const item of deliveryItems) {
+      await Inventory.findByIdAndUpdate(
+        item.itemName,
+        { $inc: { currentStock: -item.quantity } }
+      );
+    }
+
+    await DeliveryItem.deleteMany({ deliveryId: req.params.id });
     await Delivery.findByIdAndDelete(req.params.id);
     res.json({ message: 'Deleted' });
   } catch (err) {
