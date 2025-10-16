@@ -43,6 +43,9 @@ const UserSchema = new mongoose.Schema({
     deleteSites: { type: Boolean, default: false },
     viewContacts: { type: Boolean, default: true },
     viewDashboard: { type: Boolean, default: true },
+    viewAttendance: { type: Boolean, default: true },
+    editAttendance: { type: Boolean, default: false },
+    deleteAttendance: { type: Boolean, default: false },
   },
 
   department: { type: String },
