@@ -74,10 +74,9 @@ router.get('/', async (req, res) => {
 router.get('/today', async (req, res) => {
   try {
     const date = new Date().toISOString().split('T')[0];
-    const records = await Attendance.find({
-      user: req.user.id,
-      date
-    }).sort({ checkIn: -1 });
+    const records = await Attendance.find({ date })
+      .populate('user', 'fullName username')
+      .sort({ checkIn: -1 });
     
     res.json(records);
   } catch (error) {

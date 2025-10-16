@@ -79,7 +79,9 @@ UserSchema.pre('save', async function (next) {
 
 UserSchema.statics.generateUsername = function (firstName, lastName) {
   let baseUsername = '';
-  if (firstName) {
+  if (firstName && lastName) {
+    baseUsername = `${firstName}${lastName}`.toLowerCase();
+  } else if (firstName) {
     baseUsername = firstName.toLowerCase();
   } else if (lastName) {
     baseUsername = lastName.toLowerCase();
@@ -87,9 +89,6 @@ UserSchema.statics.generateUsername = function (firstName, lastName) {
     baseUsername = 'user';
   }
   baseUsername = baseUsername.replace(/[^a-z0-9]/g, '');
-  if (baseUsername.length > 6) {
-    baseUsername = baseUsername.substring(0, 6);
-  }
   const randomNum = Math.floor(Math.random() * 90) + 10;
   return `${baseUsername}${randomNum}`;
 };
