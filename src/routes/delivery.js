@@ -8,6 +8,7 @@ const multer = require('multer');
 const upload = multer();
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
+const { createLog } = require('../utils/logger');
 
 router.post('/', checkPermission('addDeliveries'), upload.single('invoice'), async (req, res) => {
   try {
@@ -26,6 +27,8 @@ router.post('/', checkPermission('addDeliveries'), upload.single('invoice'), asy
     }
     const d = new Delivery(body);
     await d.save();
+    
+    await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${body.deliveryNumber || d._id}`);
 
     if (body.items && Array.isArray(body.items)) {
       for (const item of body.items) {
@@ -85,6 +88,9 @@ router.put('/:id', checkPermission('editDeliveries'), upload.single('invoice'), 
     if (Object.keys(body).length) updateOps['$set'] = body;
     if (shouldClearInvoice) updateOps['$unset'] = { invoiceImage: '' };
     const updated = await Delivery.findByIdAndUpdate(req.params.id, updateOps, { new: true });
+    
+    await createLog('EDIT_DELIVERY', req.user.id, req.user.username, `Edited delivery: ${req.params.id}`);
+    
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -104,6 +110,9 @@ router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
 
     await DeliveryItem.deleteMany({ deliveryId: req.params.id });
     await Delivery.findByIdAndDelete(req.params.id);
+    
+    await createLog('DELETE_DELIVERY', req.user.id, req.user.username, `Deleted delivery: ${req.params.id}`);
+    
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(400).json({ error: err.message });

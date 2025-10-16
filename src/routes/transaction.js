@@ -4,6 +4,7 @@ const Transaction = require('../models/transaction');
 const Inventory = require('../models/inventory');
 const { authMiddleware } = require('../middlewares/auth');
 const checkPermission = require('../middlewares/checkPermission');
+const { createLog } = require('../utils/logger');
 
 router.get('/', authMiddleware, checkPermission('viewTransactions'), async (req, res) => {
   try {
@@ -78,6 +79,9 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
       .populate('employee', 'fullName username email')
       .populate('site', 'siteName siteCode')
       .populate('item', 'name sku');
+    
+    await createLog('ADD_TRANSACTION', req.user.id, req.user.username, `Added ${type} transaction: ${transactionId}`);
+    
     res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -127,6 +131,9 @@ router.put('/:id', authMiddleware, checkPermission('editTransactions'), async (r
       .populate('employee', 'fullName username email')
       .populate('site', 'siteName siteCode')
       .populate('item', 'name sku');
+    
+    await createLog('EDIT_TRANSACTION', req.user.id, req.user.username, `Edited transaction: ${transaction.transactionId}`);
+    
     res.json(populated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -148,6 +155,8 @@ router.delete('/:id', authMiddleware, checkPermission('deleteTransactions'), asy
       await inventory.save();
     }
 
+    await createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`);
+    
     await Transaction.findByIdAndDelete(req.params.id);
     res.json({ message: 'Transaction deleted' });
   } catch (err) {

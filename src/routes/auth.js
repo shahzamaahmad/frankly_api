@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
+const { createLog } = require('../utils/logger');
 
 router.post('/generate-username', async (req, res) => {
   try {
@@ -48,6 +49,8 @@ router.post('/login', async (req, res) => {
     user.lastLoginAt = new Date();
     await user.save();
     
+    await createLog('LOGIN', user._id, user.username, `User logged in`);
+    
     const token = jwt.sign({ id: user._id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
     const userObj = user.toObject();
     delete userObj.password;
@@ -92,6 +95,8 @@ router.put('/change-password', async (req, res) => {
     
     user.password = newPassword;
     await user.save();
+    
+    await createLog('CHANGE_PASSWORD', user._id, user.username, `Password changed`);
     
     res.json({ message: 'Password changed successfully' });
   } catch (err) {

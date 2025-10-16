@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Attendance = require('../models/attendance');
+const { createLog } = require('../utils/logger');
 
 router.post('/checkin', async (req, res) => {
   try {
@@ -24,6 +25,7 @@ router.post('/checkin', async (req, res) => {
     });
     
     await attendance.save();
+    await createLog('CHECKIN', req.user.id, req.user.username, `Checked in at ${address || 'unknown location'}`);
     res.status(201).json(attendance);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -46,6 +48,8 @@ router.put('/checkout/:id', async (req, res) => {
     attendance.checkOutLocation = { latitude, longitude, address };
     attendance.workingHours = workingHours;
     await attendance.save();
+    
+    await createLog('CHECKOUT', req.user.id, req.user.username, `Checked out at ${address || 'unknown location'} - ${Math.floor(workingHours / 3600)}h ${Math.floor((workingHours % 3600) / 60)}m`);
     
     res.json(attendance);
   } catch (error) {
@@ -90,6 +94,7 @@ router.delete('/:id', async (req, res) => {
     if (!attendance) {
       return res.status(404).json({ message: 'Attendance record not found' });
     }
+    await createLog('DELETE_ATTENDANCE', req.user.id, req.user.username, `Deleted attendance record`);
     res.json({ message: 'Attendance deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
