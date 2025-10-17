@@ -114,29 +114,36 @@ router.get('/', checkPermission('viewInventory'), async (req, res) => {
     if (req.query.origin && typeof req.query.origin === 'string') filters.origin = req.query.origin;
     
     const list = await Inventory.find(filters).lean();
+    const itemIds = list.map(i => i._id);
+    
+    const [txnAgg, userAgg] = await Promise.all([
+      Transaction.aggregate([
+        { $match: { item: { $in: itemIds } } },
+        { $group: {
+          _id: '$item',
+          issued: { $sum: { $cond: [{ $eq: ['$type', 'ISSUE'] }, '$quantity', 0] } },
+          returned: { $sum: { $cond: [{ $eq: ['$type', 'RETURN'] }, '$quantity', 0] } }
+        }}
+      ]),
+      User.aggregate([
+        { $match: { 'assets.item': { $in: itemIds } } },
+        { $unwind: '$assets' },
+        { $match: { 'assets.item': { $in: itemIds } } },
+        { $group: { _id: '$assets.item', total: { $sum: '$assets.quantity' } } }
+      ])
+    ]);
+    
+    const txnMap = {};
+    txnAgg.forEach(t => { txnMap[t._id.toString()] = t; });
+    
+    const assetMap = {};
+    userAgg.forEach(a => { assetMap[a._id.toString()] = a.total || 0; });
     
     for (const item of list) {
-      const transactions = await Transaction.find({ item: item._id }).lean();
-      const users = await User.find({ 'assets.item': item._id }).lean();
-      
-      let issued = 0;
-      let returned = 0;
-      
-      for (const txn of transactions) {
-        if (txn.type === 'ISSUE') issued += txn.quantity || 0;
-        if (txn.type === 'RETURN') returned += txn.quantity || 0;
-      }
-      
-      let assignedToEmployees = 0;
-      for (const user of users) {
-        for (const asset of user.assets || []) {
-          if (asset.item && asset.item.toString() === item._id.toString()) {
-            assignedToEmployees += asset.quantity || 0;
-          }
-        }
-      }
-      
-      item.currentStock = (item.initialStock || 0) - issued + returned - assignedToEmployees;
+      const id = item._id.toString();
+      const txn = txnMap[id] || { issued: 0, returned: 0 };
+      const assigned = assetMap[id] || 0;
+      item.currentStock = (item.initialStock || 0) - txn.issued + txn.returned - assigned;
     }
     
     res.json(list);
@@ -155,27 +162,27 @@ router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
     const inv = await Inventory.findById(req.params.id).lean();
     if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
     
-    const transactions = await Transaction.find({ item: inv._id }).lean();
-    const users = await User.find({ 'assets.item': inv._id }).lean();
+    const [txnAgg, userAgg] = await Promise.all([
+      Transaction.aggregate([
+        { $match: { item: inv._id } },
+        { $group: {
+          _id: null,
+          issued: { $sum: { $cond: [{ $eq: ['$type', 'ISSUE'] }, '$quantity', 0] } },
+          returned: { $sum: { $cond: [{ $eq: ['$type', 'RETURN'] }, '$quantity', 0] } }
+        }}
+      ]),
+      User.aggregate([
+        { $match: { 'assets.item': inv._id } },
+        { $unwind: '$assets' },
+        { $match: { 'assets.item': inv._id } },
+        { $group: { _id: null, total: { $sum: '$assets.quantity' } } }
+      ])
+    ]);
     
-    let issued = 0;
-    let returned = 0;
+    const txn = txnAgg[0] || { issued: 0, returned: 0 };
+    const assigned = userAgg[0]?.total || 0;
     
-    for (const txn of transactions) {
-      if (txn.type === 'ISSUE') issued += txn.quantity || 0;
-      if (txn.type === 'RETURN') returned += txn.quantity || 0;
-    }
-    
-    let assignedToEmployees = 0;
-    for (const user of users) {
-      for (const asset of user.assets || []) {
-        if (asset.item && asset.item.toString() === inv._id.toString()) {
-          assignedToEmployees += asset.quantity || 0;
-        }
-      }
-    }
-    
-    inv.currentStock = (inv.initialStock || 0) - issued + returned - assignedToEmployees;
+    inv.currentStock = (inv.initialStock || 0) - txn.issued + txn.returned - assigned;
     
     res.json(inv);
   } catch (err) {
