@@ -40,11 +40,11 @@ router.post('/checkin', async (req, res) => {
     
     await attendance.save();
     console.log(`/checkin - Saved attendance with date: ${attendance.date}`);
-    await createLog('CHECKIN', req.user.id, req.user.username, `Checked in at ${address || 'unknown location'}`);
+    createLog('CHECKIN', req.user.id, req.user.username, `Checked in at ${address || 'unknown location'}`).catch(e => console.error('Log failed:', e));
     res.status(201).json(attendance);
   } catch (error) {
-    console.error('Check-in error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Check-in error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 
@@ -74,12 +74,12 @@ router.put('/checkout/:id', async (req, res) => {
     attendance.workingHours = workingHours;
     await attendance.save();
     
-    await createLog('CHECKOUT', req.user.id, req.user.username, `Checked out at ${address || 'unknown location'} - ${Math.floor(workingHours / 3600)}h ${Math.floor((workingHours % 3600) / 60)}m`);
+    createLog('CHECKOUT', req.user.id, req.user.username, `Checked out at ${address || 'unknown location'} - ${Math.floor(workingHours / 3600)}h ${Math.floor((workingHours % 3600) / 60)}m`).catch(e => console.error('Log failed:', e));
     
     res.json(attendance);
   } catch (error) {
-    console.error('Check-out error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Check-out error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 
@@ -97,8 +97,8 @@ router.get('/', async (req, res) => {
     
     res.json(records);
   } catch (error) {
-    console.error('Get attendance error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Get attendance error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 
@@ -126,8 +126,8 @@ router.get('/today', async (req, res) => {
     
     res.json({ records, totalWorkingSeconds: totalSeconds });
   } catch (error) {
-    console.error('Get today attendance error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Get today attendance error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 
@@ -137,11 +137,11 @@ router.delete('/:id', async (req, res) => {
     if (!attendance) {
       return res.status(404).json({ message: 'Attendance record not found' });
     }
-    await createLog('DELETE_ATTENDANCE', req.user.id, req.user.username, `Deleted attendance record`);
+    createLog('DELETE_ATTENDANCE', req.user.id, req.user.username, `Deleted attendance record`).catch(e => console.error('Log failed:', e));
     res.json({ message: 'Attendance deleted' });
   } catch (error) {
-    console.error('Delete attendance error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Delete attendance error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 
