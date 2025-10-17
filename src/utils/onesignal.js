@@ -50,7 +50,7 @@ const sendNotification = async (options) => {
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Basic ${process.env.ONESIGNAL_REST_API_KEY}`,
+          Authorization: `Bearer ${process.env.ONESIGNAL_REST_API_KEY}`,
         },
       }
     );
