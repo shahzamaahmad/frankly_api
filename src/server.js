@@ -15,6 +15,7 @@ const transactionRoutes = require('./routes/transaction');
 const attendanceRoutes = require('./routes/attendance');
 const notificationRoutes = require('./routes/notification');
 const logRoutes = require('./routes/log');
+const onesignalRoutes = require('./routes/notifications');
 
 const { authMiddleware } = require('./middlewares/auth');
 
@@ -57,6 +58,7 @@ app.use('/api/transactions', authMiddleware, transactionRoutes);
 app.use('/api/attendance', authMiddleware, attendanceRoutes);
 app.use('/api/notifications', authMiddleware, notificationRoutes);
 app.use('/api/logs', authMiddleware, logRoutes);
+app.use('/api/onesignal', authMiddleware, onesignalRoutes);
 
 const PORT = process.env.PORT || 4000;
 
