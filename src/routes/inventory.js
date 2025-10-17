@@ -201,25 +201,32 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
 }, async (req, res) => {
   try {
     const data = req.body;
+    console.log('Update inventory - has file:', !!req.file);
+    
     try {
-      if (typeof data.image === 'string' && data.image === '') {
+      if (req.file) {
+        console.log('Uploading file to Cloudinary...');
+        const imageUrl = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'image');
+        console.log('Cloudinary URL:', imageUrl);
+        data.image = imageUrl;
+      } else if (typeof data.image === 'string' && data.image === '') {
         data.image = '';
-      } else if (req.file) {
-        data.image = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'image');
       }
     } catch (e) {
       console.error('CDN upload failed:', e.message);
       if (req.file) data.image = req.file.buffer.toString('base64');
     }
-    // Build update operations: support clearing image via sending image == ''
+    
     const updateOps = {};
     const shouldClearImage = typeof data.image === 'string' && data.image === '';
-    // Remove image key from set fields so we can $unset instead
     if (shouldClearImage) delete data.image;
     if (Object.keys(data).length) updateOps['$set'] = data;
     if (shouldClearImage) updateOps['$unset'] = { image: '' };
+    
+    console.log('Update operations:', JSON.stringify(updateOps));
     const updated = await Inventory.findByIdAndUpdate(req.params.id, updateOps, { new: true });
     if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
+    console.log('Updated item has image:', !!updated.image);
     res.json(updated);
   } catch (err) {
     console.error('Update inventory error:', err);
