@@ -6,8 +6,8 @@ const checkPermission = require('../middlewares/checkPermission');
 
 router.post('/', checkPermission('addSites'), async (req, res) => {
   try {
-    if (!req.body.siteCode || !req.body.siteName || !req.body.engineer) {
-      return res.status(400).json({ error: 'Site code, name, and engineer are required' });
+    if (!req.body.siteCode || !req.body.siteName) {
+      return res.status(400).json({ error: 'Site code and name are required' });
     }
     const s = new Site(req.body);
     await s.save();
