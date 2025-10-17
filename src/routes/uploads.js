@@ -22,8 +22,8 @@ router.post('/', (req, res, next) => {
 }, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
   try {
-    const cdnUrl = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'file');
-    res.json({ cdnUrl });
+    const cloudinaryUrl = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'file');
+    res.json({ cloudinaryUrl });
   } catch (err) {
     console.error('Upload error:', err);
     res.status(500).json({ error: 'Upload failed' });
