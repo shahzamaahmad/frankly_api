@@ -71,4 +71,44 @@ router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
   }
 });
 
+router.post('/:id/assign-asset', checkPermission('editEmployees'), async (req, res) => {
+  try {
+    const { item, quantity, condition, remarks } = req.body;
+    const Inventory = require('../models/inventory');
+    const Transaction = require('../models/transaction');
+    
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    const inventoryItem = await Inventory.findById(item);
+    if (!inventoryItem) return res.status(404).json({ message: 'Item not found' });
+    
+    if (inventoryItem.currentStock < quantity) {
+      return res.status(400).json({ message: 'Insufficient stock' });
+    }
+    
+    inventoryItem.currentStock -= quantity;
+    await inventoryItem.save();
+    
+    const transaction = new Transaction({
+      type: 'ISSUE',
+      employee: req.params.id,
+      item: item,
+      quantity: quantity,
+      timestamp: new Date(),
+    });
+    await transaction.save();
+    
+    const asset = { item, quantity, condition, remarks };
+    if (!user.assets) user.assets = [];
+    user.assets.push(asset);
+    await user.save();
+    
+    res.json({ message: 'Asset assigned successfully', transaction });
+  } catch (err) {
+    console.error('Assign asset error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 module.exports = router;
