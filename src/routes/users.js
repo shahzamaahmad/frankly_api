@@ -5,7 +5,9 @@ const checkPermission = require('../middlewares/checkPermission');
 
 router.get('/', checkPermission('viewEmployees'), async (req, res) => {
   try {
-    const users = await User.find().select('-password');
+    const users = await User.find()
+      .select('-password')
+      .lean();
     res.json(users);
   } catch (err) {
     console.error('Get users error:', err);

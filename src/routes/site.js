@@ -23,7 +23,8 @@ router.get('/', checkPermission('viewSites'), async (req, res) => {
     const list = await Site.find()
       .populate('engineer', 'username fullName')
       .populate('siteManager', 'username fullName')
-      .populate('safetyOfficer', 'username fullName');
+      .populate('safetyOfficer', 'username fullName')
+      .lean();
     res.json(list);
   } catch (err) {
     console.error('Get sites error:', err);

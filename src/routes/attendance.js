@@ -106,14 +106,12 @@ router.get('/today', async (req, res) => {
   try {
     const clientDate = req.query.date;
     const date = clientDate || new Date().toISOString().split('T')[0];
-    console.log(`/today - Looking for date: ${date}, user: ${req.user.id}`);
+    
     const records = await Attendance.find({ date, user: req.user.id })
       .populate('user', 'fullName username')
-      .sort({ checkIn: -1 });
-    console.log(`/today - Found ${records.length} records`);
-    for (const r of records) {
-      console.log(`  Record: date=${r.date}, checkIn=${r.checkIn}, checkOut=${r.checkOut}`);
-    }
+      .select('user checkIn checkOut workingHours date sessionNumber')
+      .sort({ checkIn: -1 })
+      .lean();
     
     let totalSeconds = 0;
     const now = new Date();

@@ -112,4 +112,9 @@ UserSchema.methods.comparePassword = async function (candidate) {
   }
 }
 
+UserSchema.index({ username: 1 });
+UserSchema.index({ isActive: 1 });
+UserSchema.index({ emiratesIdExpiryDate: 1 });
+UserSchema.index({ dateOfBirth: 1 });
+
 module.exports = mongoose.model('User', UserSchema);

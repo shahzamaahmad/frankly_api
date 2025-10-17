@@ -62,7 +62,7 @@ router.get('/', checkPermission('viewInventory'), async (req, res) => {
     const filters = {};
     if (req.query.type && typeof req.query.type === 'string') filters.type = req.query.type;
     if (req.query.origin && typeof req.query.origin === 'string') filters.origin = req.query.origin;
-    const list = await Inventory.find(filters);
+    const list = await Inventory.find(filters).lean();
     res.json(list);
   } catch (err) {
     console.error('Get inventory error:', err);
