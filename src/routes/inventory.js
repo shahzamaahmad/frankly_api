@@ -83,17 +83,22 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
       return res.status(400).json({ error: 'Stock cannot be negative' });
     }
     
+    if (data.image) {
+      data.imageUrl = data.image;
+      delete data.image;
+    }
+    
     try {
       if (req.file) {
-        data.image = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'image');
+        data.imageUrl = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'image');
       } else if (data.imageBase64) {
         const b = Buffer.from(data.imageBase64, 'base64');
-        data.image = await uploadBufferToCloudinary(b, 'image');
+        data.imageUrl = await uploadBufferToCloudinary(b, 'image');
       }
     } catch (e) {
       console.error('CDN upload failed:', e.message);
-      if (req.file) data.image = req.file.buffer.toString('base64');
-      else if (data.imageBase64) data.image = data.imageBase64;
+      if (req.file) data.imageUrl = req.file.buffer.toString('base64');
+      else if (data.imageBase64) data.imageUrl = data.imageBase64;
     }
     const inv = new Inventory(data);
     await inv.save();
@@ -219,28 +224,28 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
         console.log('Uploading file to Cloudinary...');
         const imageUrl = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'image');
         console.log('Cloudinary URL:', imageUrl);
-        data.image = imageUrl;
-      } else if (typeof data.image === 'string' && data.image === '') {
-        data.image = '';
+        data.imageUrl = imageUrl;
+      } else if (typeof data.imageUrl === 'string' && data.imageUrl === '') {
+        data.imageUrl = '';
       }
     } catch (e) {
       console.error('CDN upload failed:', e.message);
-      if (req.file) data.image = req.file.buffer.toString('base64');
+      if (req.file) data.imageUrl = req.file.buffer.toString('base64');
     }
     
-    console.log('Image value in data:', data.image);
+    if (data.image) {
+      data.imageUrl = data.image;
+      delete data.image;
+    }
     
     const updateOps = {};
-    const shouldClearImage = typeof data.image === 'string' && data.image === '';
-    if (shouldClearImage) delete data.image;
+    const shouldClearImage = typeof data.imageUrl === 'string' && data.imageUrl === '';
+    if (shouldClearImage) delete data.imageUrl;
     if (Object.keys(data).length) updateOps['$set'] = data;
-    if (shouldClearImage) updateOps['$unset'] = { image: '' };
+    if (shouldClearImage) updateOps['$unset'] = { imageUrl: '' };
     
-    console.log('Update operations:', JSON.stringify(updateOps).substring(0, 500));
     const updated = await Inventory.findByIdAndUpdate(req.params.id, updateOps, { new: true });
     if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
-    console.log('Updated item has image:', !!updated.image);
-    if (updated.image) console.log('Image URL:', updated.image);
     res.json(updated);
   } catch (err) {
     console.error('Update inventory error:', err);
