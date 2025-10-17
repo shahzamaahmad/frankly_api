@@ -53,6 +53,7 @@ const multer = require('multer');
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
+    if (!file) return cb(null, true);
     const allowed = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp'];
     if (allowed.includes(file.mimetype)) {
       cb(null, true);
@@ -67,7 +68,7 @@ const checkPermission = require('../middlewares/checkPermission');
 // Create inventory (with optional image upload - base64/binary)
 router.post('/', checkPermission('addInventory'), (req, res, next) => {
   upload.single('image')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
+    if (err && err.message !== 'Invalid file type') return res.status(400).json({ error: err.message });
     next();
   });
 }, async (req, res) => {
@@ -194,7 +195,7 @@ router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
 // Update (PUT)
 router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
   upload.single('image')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
+    if (err && err.message !== 'Invalid file type') return res.status(400).json({ error: err.message });
     next();
   });
 }, async (req, res) => {

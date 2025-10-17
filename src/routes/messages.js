@@ -7,10 +7,12 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: 'daoummcel',
+  api_key: '359941915345927',
+  api_secret: 'my0lB_-mevYyarmob6sZsa4fquo',
 });
+
+console.log('Cloudinary configured:', cloudinary.config().cloud_name);
 
 const storage = multer.memoryStorage();
 const upload = multer({ 
@@ -29,6 +31,12 @@ const upload = multer({
 // Send message with file
 router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
   try {
+    console.log('Cloudinary config check:', {
+      hasCloudName: !!cloudinary.config().cloud_name,
+      hasApiKey: !!cloudinary.config().api_key,
+      hasApiSecret: !!cloudinary.config().api_secret,
+    });
+
     const group = await Group.findById(req.body.group);
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
@@ -42,17 +50,26 @@ router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
     let messageType = req.body.type || 'text';
 
     if (req.file) {
-      const result = await new Promise((resolve, reject) => {
-        cloudinary.uploader.upload_stream(
-          { folder: 'chat_files' },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          }
-        ).end(req.file.buffer);
-      });
-      fileUrl = result.secure_url;
-      messageType = req.file.mimetype.startsWith('image/') ? 'image' : 'file';
+      try {
+        const result = await new Promise((resolve, reject) => {
+          cloudinary.uploader.upload_stream(
+            { folder: 'chat_files' },
+            (error, result) => {
+              if (error) {
+                console.error('Cloudinary upload error:', error);
+                reject(error);
+              } else {
+                resolve(result);
+              }
+            }
+          ).end(req.file.buffer);
+        });
+        fileUrl = result.secure_url;
+        messageType = req.file.mimetype.startsWith('image/') ? 'image' : 'file';
+      } catch (uploadError) {
+        console.error('File upload failed:', uploadError);
+        return res.status(500).json({ error: 'File upload failed: ' + uploadError.message });
+      }
     }
 
     const message = new Message({
