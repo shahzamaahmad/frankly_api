@@ -168,6 +168,65 @@ router.get('/today', async (req, res) => {
   }
 });
 
+router.get('/monthly-report', async (req, res) => {
+  try {
+    const { userId, year, month } = req.query;
+    
+    if (!userId || !year || !month) {
+      return res.status(400).json({ message: 'userId, year, and month are required' });
+    }
+    
+    const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+    const endDate = new Date(parseInt(year), parseInt(month), 0);
+    
+    const records = await Attendance.find({
+      user: userId,
+      date: {
+        $gte: startDate.toISOString().split('T')[0],
+        $lte: endDate.toISOString().split('T')[0]
+      }
+    }).lean();
+    
+    const dailyRecords = {};
+    for (const record of records) {
+      if (!dailyRecords[record.date]) {
+        dailyRecords[record.date] = { sessions: [], totalWorkingHours: 0 };
+      }
+      dailyRecords[record.date].sessions.push(record);
+      dailyRecords[record.date].totalWorkingHours += record.workingHours || 0;
+    }
+    
+    const report = [];
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0];
+      if (dailyRecords[dateStr]) {
+        report.push({
+          date: dateStr,
+          status: 'present',
+          sessions: dailyRecords[dateStr].sessions,
+          totalWorkingHours: dailyRecords[dateStr].totalWorkingHours
+        });
+      } else {
+        report.push({
+          date: dateStr,
+          status: 'absent',
+          sessions: [],
+          totalWorkingHours: 0
+        });
+      }
+    }
+    
+    const totalHours = Object.values(dailyRecords).reduce((sum, day) => sum + day.totalWorkingHours, 0);
+    const presentDays = Object.keys(dailyRecords).length;
+    const absentDays = report.length - presentDays;
+    
+    res.json({ report, totalHours, presentDays, absentDays });
+  } catch (error) {
+    console.error('Monthly report error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     const attendance = await Attendance.findByIdAndDelete(req.params.id);
