@@ -24,11 +24,18 @@ router.post('/checkin', async (req, res) => {
       return res.status(400).json({ message: 'Please check out first before checking in again' });
     }
     
+    const todayRecordsCount = await Attendance.countDocuments({
+      user: req.user.id,
+      date: recordDate
+    });
+    const sessionNumber = todayRecordsCount + 1;
+    
     const attendance = new Attendance({
       user: req.user.id,
       checkIn: recordCheckIn,
       checkInLocation: { latitude, longitude, address },
-      date: recordDate
+      date: recordDate,
+      sessionNumber
     });
     
     await attendance.save();

@@ -30,6 +30,10 @@ const attendanceSchema = new mongoose.Schema({
   date: {
     type: String,
     required: true
+  },
+  sessionNumber: {
+    type: Number,
+    default: 1
   }
 }, { timestamps: true });
 
