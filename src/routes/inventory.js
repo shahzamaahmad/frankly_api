@@ -202,6 +202,17 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
   try {
     const data = req.body;
     console.log('Update inventory - has file:', !!req.file);
+    console.log('Update inventory - body keys:', Object.keys(data));
+    
+    // Parse numeric fields from strings
+    if (data.initialStock) data.initialStock = Number(data.initialStock);
+    if (data.currentStock) data.currentStock = Number(data.currentStock);
+    if (data.unitCost) data.unitCost = Number(data.unitCost);
+    if (data.weightKg) data.weightKg = Number(data.weightKg);
+    if (data.warrantyMonths) data.warrantyMonths = Number(data.warrantyMonths);
+    if (data.expectedLifespanMonths) data.expectedLifespanMonths = Number(data.expectedLifespanMonths);
+    if (data.reorderLevel) data.reorderLevel = Number(data.reorderLevel);
+    if (data.maxStockLevel) data.maxStockLevel = Number(data.maxStockLevel);
     
     try {
       if (req.file) {
@@ -223,7 +234,6 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
     if (Object.keys(data).length) updateOps['$set'] = data;
     if (shouldClearImage) updateOps['$unset'] = { image: '' };
     
-    console.log('Update operations:', JSON.stringify(updateOps));
     const updated = await Inventory.findByIdAndUpdate(req.params.id, updateOps, { new: true });
     if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
     console.log('Updated item has image:', !!updated.image);
