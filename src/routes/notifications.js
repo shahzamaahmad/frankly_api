@@ -11,6 +11,8 @@ router.post('/send', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Title and message are required' });
     }
 
+    console.log('Notification request:', { title, message, userIds });
+
     const result = await sendNotification({
       title,
       message,
@@ -26,7 +28,9 @@ router.post('/send', authMiddleware, async (req, res) => {
     });
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to send notification' });
+    console.error('Send notification error:', error.message);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ error: 'Failed to send notification', message: error.message });
   }
 });
 

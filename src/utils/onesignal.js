@@ -50,7 +50,7 @@ const sendNotification = async (options) => {
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.ONESIGNAL_REST_API_KEY}`,
+          'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}`,
         },
       }
     );
@@ -59,10 +59,11 @@ const sendNotification = async (options) => {
     return response.data;
   } catch (error) {
     console.error('OneSignal error:', error.response?.data || error.message);
+    console.error('Full error:', error);
     if (error.response?.data?.errors) {
-      throw new Error(`OneSignal API Error: ${error.response.data.errors.join(', ')}`);
+      throw new Error(`OneSignal API Error: ${JSON.stringify(error.response.data.errors)}`);
     }
-    throw error;
+    throw new Error(error.message || 'OneSignal request failed');
   }
 };
 
