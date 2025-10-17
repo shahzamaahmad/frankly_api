@@ -2,6 +2,53 @@
 const express = require('express');
 const router = express.Router();
 const Inventory = require('../models/inventory');
+
+/**
+ * @swagger
+ * tags:
+ *   name: Inventory
+ *   description: Inventory management
+ */
+
+/**
+ * @swagger
+ * /inventory:
+ *   get:
+ *     summary: Get all inventory items
+ *     tags: [Inventory]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of inventory items
+ *   post:
+ *     summary: Create inventory item
+ *     tags: [Inventory]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - itemName
+ *               - sku
+ *               - category
+ *             properties:
+ *               itemName:
+ *                 type: string
+ *               sku:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               currentStock:
+ *                 type: number
+ *     responses:
+ *       201:
+ *         description: Item created
+ */
 const multer = require('multer');
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },

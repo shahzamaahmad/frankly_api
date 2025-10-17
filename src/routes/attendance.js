@@ -1,6 +1,43 @@
 const express = require('express');
 const router = express.Router();
 const Attendance = require('../models/attendance');
+
+/**
+ * @swagger
+ * tags:
+ *   name: Attendance
+ *   description: Attendance tracking
+ */
+
+/**
+ * @swagger
+ * /attendance/checkin:
+ *   post:
+ *     summary: Check in
+ *     tags: [Attendance]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - latitude
+ *               - longitude
+ *               - address
+ *             properties:
+ *               latitude:
+ *                 type: number
+ *               longitude:
+ *                 type: number
+ *               address:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Checked in successfully
+ */
 const { createLog } = require('../utils/logger');
 
 router.post('/checkin', async (req, res) => {
