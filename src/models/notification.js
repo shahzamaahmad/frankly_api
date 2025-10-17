@@ -22,5 +22,8 @@ NotificationSchema.pre('save', function(next) {
 
 NotificationSchema.index({ expiryDate: 1 });
 NotificationSchema.index({ createdAt: -1 });
+NotificationSchema.index({ sendingDate: -1 });
+NotificationSchema.index({ sentBy: 1 });
+NotificationSchema.index({ expiryDate: 1, sendingDate: -1 });
 
 module.exports = mongoose.model('Notification', NotificationSchema);

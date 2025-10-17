@@ -11,4 +11,9 @@ const DeliverySchema = new mongoose.Schema({
   invoiceNumber: { type: String }
 }, { timestamps: true });
 
+DeliverySchema.index({ deliveryDate: -1 });
+DeliverySchema.index({ seller: 1 });
+DeliverySchema.index({ invoiceNumber: 1 });
+DeliverySchema.index({ createdAt: -1 });
+
 module.exports = mongoose.model('Delivery', DeliverySchema);

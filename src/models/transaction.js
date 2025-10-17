@@ -57,5 +57,11 @@ transactionSchema.index({ site: 1 });
 transactionSchema.index({ item: 1 });
 transactionSchema.index({ timestamp: -1 });
 transactionSchema.index({ type: 1 });
+transactionSchema.index({ employee: 1 });
+transactionSchema.index({ transactionId: 1 });
+transactionSchema.index({ site: 1, timestamp: -1 });
+transactionSchema.index({ item: 1, timestamp: -1 });
+transactionSchema.index({ employee: 1, timestamp: -1 });
+transactionSchema.index({ type: 1, timestamp: -1 });
 
 module.exports = mongoose.model('Transaction', transactionSchema);

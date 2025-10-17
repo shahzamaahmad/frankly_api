@@ -38,5 +38,12 @@ const attendanceSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 attendanceSchema.index({ user: 1, date: 1 });
+attendanceSchema.index({ date: 1 });
+attendanceSchema.index({ user: 1 });
+attendanceSchema.index({ checkIn: -1 });
+attendanceSchema.index({ checkOut: 1 });
+attendanceSchema.index({ date: 1, checkIn: -1 });
+attendanceSchema.index({ user: 1, checkIn: -1 });
+attendanceSchema.index({ sessionNumber: 1 });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

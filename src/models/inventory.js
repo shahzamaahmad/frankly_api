@@ -46,5 +46,15 @@ const InventorySchema = new mongoose.Schema({
 InventorySchema.index({ name: 1 });
 InventorySchema.index({ category: 1 });
 InventorySchema.index({ status: 1 });
+InventorySchema.index({ sku: 1 });
+InventorySchema.index({ subCategory: 1 });
+InventorySchema.index({ brand: 1 });
+InventorySchema.index({ barcode: 1 });
+InventorySchema.index({ currentStock: 1 });
+InventorySchema.index({ reorderLevel: 1 });
+InventorySchema.index({ 'supplier.name': 1 });
+InventorySchema.index({ category: 1, status: 1 });
+InventorySchema.index({ currentStock: 1, reorderLevel: 1 });
+InventorySchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Inventory', InventorySchema);

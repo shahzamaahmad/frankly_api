@@ -104,5 +104,12 @@ SiteSchema.pre('save', function (next) {
 
 SiteSchema.index({ siteName: 1 });
 SiteSchema.index({ status: 1 });
+SiteSchema.index({ engineer: 1 });
+SiteSchema.index({ siteManager: 1 });
+SiteSchema.index({ sector: 1 });
+SiteSchema.index({ startDate: -1 });
+SiteSchema.index({ endDate: 1 });
+SiteSchema.index({ 'client.name': 1 });
+SiteSchema.index({ coordinates: '2dsphere' });
 
 module.exports = mongoose.model('Site', SiteSchema);

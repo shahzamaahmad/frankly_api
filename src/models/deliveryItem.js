@@ -9,5 +9,7 @@ const DeliveryItemSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 DeliveryItemSchema.index({ deliveryId: 1 });
+DeliveryItemSchema.index({ itemName: 1 });
+DeliveryItemSchema.index({ deliveryId: 1, itemName: 1 });
 
 module.exports = mongoose.model('DeliveryItem', DeliveryItemSchema);
