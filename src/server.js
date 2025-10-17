@@ -1,25 +1,45 @@
 
 require('dotenv').config();
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const swaggerUi = require('swagger-ui-express');
-const swaggerSpec = require('./swagger');
 
-const authRoutes = require('./routes/auth');
-const inventoryRoutes = require('./routes/inventory');
-const siteRoutes = require('./routes/site');
-const deliveryRoutes = require('./routes/delivery');
-const deliveryItemRoutes = require('./routes/deliveryItem');
-const uploadsRoutes = require('./routes/uploads');
-const usersRoutes = require('./routes/users');
-const transactionRoutes = require('./routes/transaction');
-const attendanceRoutes = require('./routes/attendance');
-const notificationRoutes = require('./routes/notification');
-const logRoutes = require('./routes/log');
-const onesignalRoutes = require('./routes/notifications');
+const loadRoute = (path) => {
+  try {
+    return require(path);
+  } catch (err) {
+    console.error(`Failed to load route ${path}:`, err.message);
+    throw err;
+  }
+};
 
-const { authMiddleware } = require('./middlewares/auth');
+const express = loadRoute('express');
+const mongoose = loadRoute('mongoose');
+const cors = loadRoute('cors');
+const swaggerUi = loadRoute('swagger-ui-express');
+const swaggerSpec = loadRoute('./swagger');
+
+
+
+let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes, deliveryItemRoutes;
+let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
+let notificationRoutes, logRoutes, onesignalRoutes;
+
+const initRoutes = () => {
+  authRoutes = loadRoute('./routes/auth');
+  inventoryRoutes = loadRoute('./routes/inventory');
+  siteRoutes = loadRoute('./routes/site');
+  deliveryRoutes = loadRoute('./routes/delivery');
+  deliveryItemRoutes = loadRoute('./routes/deliveryItem');
+  uploadsRoutes = loadRoute('./routes/uploads');
+  usersRoutes = loadRoute('./routes/users');
+  transactionRoutes = loadRoute('./routes/transaction');
+  attendanceRoutes = loadRoute('./routes/attendance');
+  notificationRoutes = loadRoute('./routes/notification');
+  logRoutes = loadRoute('./routes/log');
+  onesignalRoutes = loadRoute('./routes/notifications');
+};
+
+initRoutes();
+
+const { authMiddleware } = loadRoute('./middlewares/auth');
 
 const app = express();
 
@@ -52,17 +72,22 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/auth', authRoutes);
 
 // protect the rest
-app.use('/api/inventory', authMiddleware, inventoryRoutes);
-app.use('/api/sites', authMiddleware, siteRoutes);
-app.use('/api/deliveries', authMiddleware, deliveryRoutes);
-app.use('/api/delivery-items', authMiddleware, deliveryItemRoutes);
-app.use('/api/uploads', authMiddleware, uploadsRoutes);
-app.use('/api/users', authMiddleware, usersRoutes);
-app.use('/api/transactions', authMiddleware, transactionRoutes);
-app.use('/api/attendance', authMiddleware, attendanceRoutes);
-app.use('/api/notifications', authMiddleware, notificationRoutes);
-app.use('/api/logs', authMiddleware, logRoutes);
-app.use('/api/onesignal', authMiddleware, onesignalRoutes);
+try {
+  app.use('/api/inventory', authMiddleware, inventoryRoutes);
+  app.use('/api/sites', authMiddleware, siteRoutes);
+  app.use('/api/deliveries', authMiddleware, deliveryRoutes);
+  app.use('/api/delivery-items', authMiddleware, deliveryItemRoutes);
+  app.use('/api/uploads', authMiddleware, uploadsRoutes);
+  app.use('/api/users', authMiddleware, usersRoutes);
+  app.use('/api/transactions', authMiddleware, transactionRoutes);
+  app.use('/api/attendance', authMiddleware, attendanceRoutes);
+  app.use('/api/notifications', authMiddleware, notificationRoutes);
+  app.use('/api/logs', authMiddleware, logRoutes);
+  app.use('/api/onesignal', authMiddleware, onesignalRoutes);
+} catch (err) {
+  console.error('Route setup error:', err);
+  process.exit(1);
+}
 
 app.use((err, req, res, _next) => {
   console.error('Error:', err.stack);
