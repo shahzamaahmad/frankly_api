@@ -64,6 +64,18 @@ app.use('/api/notifications', authMiddleware, notificationRoutes);
 app.use('/api/logs', authMiddleware, logRoutes);
 app.use('/api/onesignal', authMiddleware, onesignalRoutes);
 
+app.use((err, req, res, _next) => {
+  console.error('Error:', err.stack);
+  res.status(err.status || 500).json({ 
+    error: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
 const PORT = process.env.PORT || 4000;
 
 mongoose.connect(process.env.MONGODB_URI, {
@@ -75,18 +87,32 @@ mongoose.connect(process.env.MONGODB_URI, {
   socketTimeoutMS: 45000,
 }).then(() => {
   console.log('MongoDB connected');
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  
+  server.on('error', (err) => {
+    console.error('Server error:', err);
+    process.exit(1);
+  });
 }).catch(err => {
-  console.error('MongoDB connection error:', err);
+  console.error('MongoDB connection error:', err.message);
   process.exit(1);
 });
 
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled rejection:', err);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
   process.exit(1);
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception:', err);
+  console.error('Uncaught exception:', err.message);
+  console.error('Stack:', err.stack);
   process.exit(1);
+});
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, closing server gracefully');
+  mongoose.connection.close(false, () => {
+    console.log('MongoDB connection closed');
+    process.exit(0);
+  });
 });
