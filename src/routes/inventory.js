@@ -228,15 +228,19 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
       if (req.file) data.image = req.file.buffer.toString('base64');
     }
     
+    console.log('Image value in data:', data.image);
+    
     const updateOps = {};
     const shouldClearImage = typeof data.image === 'string' && data.image === '';
     if (shouldClearImage) delete data.image;
     if (Object.keys(data).length) updateOps['$set'] = data;
     if (shouldClearImage) updateOps['$unset'] = { image: '' };
     
+    console.log('Update operations:', JSON.stringify(updateOps).substring(0, 500));
     const updated = await Inventory.findByIdAndUpdate(req.params.id, updateOps, { new: true });
     if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
     console.log('Updated item has image:', !!updated.image);
+    if (updated.image) console.log('Image URL:', updated.image);
     res.json(updated);
   } catch (err) {
     console.error('Update inventory error:', err);
