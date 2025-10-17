@@ -125,19 +125,38 @@ router.post('/:id/assign-asset', checkPermission('editEmployees'), async (req, r
   try {
     const { item, quantity, condition, remarks } = req.body;
     const Inventory = require('../models/inventory');
+    const Transaction = require('../models/transaction');
     
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
-    const inventoryItem = await Inventory.findById(item);
+    const inventoryItem = await Inventory.findById(item).lean();
     if (!inventoryItem) return res.status(404).json({ message: 'Item not found' });
     
-    if (inventoryItem.currentStock < quantity) {
-      return res.status(400).json({ message: 'Insufficient stock' });
+    const transactions = await Transaction.find({ item }).lean();
+    const users = await User.find({ 'assets.item': item }).lean();
+    
+    let issued = 0;
+    let returned = 0;
+    for (const txn of transactions) {
+      if (txn.type === 'ISSUE') issued += txn.quantity || 0;
+      if (txn.type === 'RETURN') returned += txn.quantity || 0;
     }
     
-    inventoryItem.currentStock -= quantity;
-    await inventoryItem.save();
+    let assignedToEmployees = 0;
+    for (const u of users) {
+      for (const asset of u.assets || []) {
+        if (asset.item && asset.item.toString() === item) {
+          assignedToEmployees += asset.quantity || 0;
+        }
+      }
+    }
+    
+    const currentStock = (inventoryItem.initialStock || 0) - issued + returned - assignedToEmployees;
+    
+    if (currentStock < quantity) {
+      return res.status(400).json({ message: 'Insufficient stock' });
+    }
     
     const asset = { item, quantity, condition, remarks };
     if (!user.assets) user.assets = [];

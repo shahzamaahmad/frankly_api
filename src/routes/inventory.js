@@ -106,10 +106,39 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
 // Get all (with optional filters)
 router.get('/', checkPermission('viewInventory'), async (req, res) => {
   try {
+    const Transaction = require('../models/transaction');
+    const User = require('../models/user');
+    
     const filters = {};
     if (req.query.type && typeof req.query.type === 'string') filters.type = req.query.type;
     if (req.query.origin && typeof req.query.origin === 'string') filters.origin = req.query.origin;
+    
     const list = await Inventory.find(filters).lean();
+    
+    for (const item of list) {
+      const transactions = await Transaction.find({ item: item._id }).lean();
+      const users = await User.find({ 'assets.item': item._id }).lean();
+      
+      let issued = 0;
+      let returned = 0;
+      
+      for (const txn of transactions) {
+        if (txn.type === 'ISSUE') issued += txn.quantity || 0;
+        if (txn.type === 'RETURN') returned += txn.quantity || 0;
+      }
+      
+      let assignedToEmployees = 0;
+      for (const user of users) {
+        for (const asset of user.assets || []) {
+          if (asset.item && asset.item.toString() === item._id.toString()) {
+            assignedToEmployees += asset.quantity || 0;
+          }
+        }
+      }
+      
+      item.currentStock = (item.initialStock || 0) - issued + returned - assignedToEmployees;
+    }
+    
     res.json(list);
   } catch (err) {
     console.error('Get inventory error:', err);
@@ -120,8 +149,34 @@ router.get('/', checkPermission('viewInventory'), async (req, res) => {
 // Get single
 router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
   try {
-    const inv = await Inventory.findById(req.params.id);
+    const Transaction = require('../models/transaction');
+    const User = require('../models/user');
+    
+    const inv = await Inventory.findById(req.params.id).lean();
     if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
+    
+    const transactions = await Transaction.find({ item: inv._id }).lean();
+    const users = await User.find({ 'assets.item': inv._id }).lean();
+    
+    let issued = 0;
+    let returned = 0;
+    
+    for (const txn of transactions) {
+      if (txn.type === 'ISSUE') issued += txn.quantity || 0;
+      if (txn.type === 'RETURN') returned += txn.quantity || 0;
+    }
+    
+    let assignedToEmployees = 0;
+    for (const user of users) {
+      for (const asset of user.assets || []) {
+        if (asset.item && asset.item.toString() === inv._id.toString()) {
+          assignedToEmployees += asset.quantity || 0;
+        }
+      }
+    }
+    
+    inv.currentStock = (inv.initialStock || 0) - issued + returned - assignedToEmployees;
+    
     res.json(inv);
   } catch (err) {
     console.error('Get inventory item error:', err);
