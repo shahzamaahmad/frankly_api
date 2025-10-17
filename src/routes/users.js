@@ -71,11 +71,60 @@ router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /users/{id}/assign-asset:
+ *   post:
+ *     summary: Assign asset to employee
+ *     description: Assigns an inventory item to an employee and updates stock
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - item
+ *               - quantity
+ *               - condition
+ *             properties:
+ *               item:
+ *                 type: string
+ *                 description: Inventory item ID
+ *               quantity:
+ *                 type: integer
+ *                 description: Quantity to assign
+ *               condition:
+ *                 type: string
+ *                 enum: [new, used, damaged]
+ *                 description: Asset condition
+ *               remarks:
+ *                 type: string
+ *                 description: Optional remarks
+ *     responses:
+ *       200:
+ *         description: Asset assigned successfully
+ *       400:
+ *         description: Insufficient stock
+ *       404:
+ *         description: User or item not found
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/:id/assign-asset', checkPermission('editEmployees'), async (req, res) => {
   try {
     const { item, quantity, condition, remarks } = req.body;
     const Inventory = require('../models/inventory');
-    const Transaction = require('../models/transaction');
     
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -90,21 +139,12 @@ router.post('/:id/assign-asset', checkPermission('editEmployees'), async (req, r
     inventoryItem.currentStock -= quantity;
     await inventoryItem.save();
     
-    const transaction = new Transaction({
-      type: 'ISSUE',
-      employee: req.params.id,
-      item: item,
-      quantity: quantity,
-      timestamp: new Date(),
-    });
-    await transaction.save();
-    
     const asset = { item, quantity, condition, remarks };
     if (!user.assets) user.assets = [];
     user.assets.push(asset);
     await user.save();
     
-    res.json({ message: 'Asset assigned successfully', transaction });
+    res.json({ message: 'Asset assigned successfully' });
   } catch (err) {
     console.error('Assign asset error:', err);
     res.status(500).json({ message: 'Internal server error' });
