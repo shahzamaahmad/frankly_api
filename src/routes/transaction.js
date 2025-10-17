@@ -47,19 +47,36 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
       return res.status(400).json({ error: 'Invalid input data' });
     }
     
-    const inventory = await Inventory.findById(item);
+    const inventory = await Inventory.findById(item).lean();
     if (!inventory) return res.status(404).json({ error: 'Item not found' });
 
     if (type === 'ISSUE') {
-      if (inventory.currentStock < quantity) {
+      const User = require('../models/user');
+      const [txnAgg, userAgg] = await Promise.all([
+        Transaction.aggregate([
+          { $match: { item: inventory._id } },
+          { $group: {
+            _id: null,
+            issued: { $sum: { $cond: [{ $eq: ['$type', 'ISSUE'] }, '$quantity', 0] } },
+            returned: { $sum: { $cond: [{ $eq: ['$type', 'RETURN'] }, '$quantity', 0] } }
+          }}
+        ]),
+        User.aggregate([
+          { $match: { 'assets.item': inventory._id } },
+          { $unwind: '$assets' },
+          { $match: { 'assets.item': inventory._id } },
+          { $group: { _id: null, total: { $sum: '$assets.quantity' } } }
+        ])
+      ]);
+      
+      const txn = txnAgg[0] || { issued: 0, returned: 0 };
+      const assigned = userAgg[0]?.total || 0;
+      const currentStock = (inventory.initialStock || 0) - txn.issued + txn.returned - assigned;
+      
+      if (currentStock < quantity) {
         return res.status(400).json({ error: 'Insufficient stock' });
       }
-      inventory.currentStock -= quantity;
-    } else if (type === 'RETURN') {
-      inventory.currentStock += quantity;
     }
-
-    await inventory.save();
 
     const lastTransaction = await Transaction.findOne().sort({ transactionId: -1 });
     let nextNum = 1;
@@ -106,28 +123,8 @@ router.put('/:id', authMiddleware, checkPermission('editTransactions'), async (r
       return res.status(400).json({ error: 'Invalid input data' });
     }
 
-    const oldInventory = await Inventory.findById(transaction.item);
-    if (oldInventory) {
-      if (transaction.type === 'ISSUE') {
-        oldInventory.currentStock += transaction.quantity;
-      } else if (transaction.type === 'RETURN') {
-        oldInventory.currentStock -= transaction.quantity;
-      }
-      await oldInventory.save();
-    }
-
-    const newInventory = await Inventory.findById(item);
+    const newInventory = await Inventory.findById(item).lean();
     if (!newInventory) return res.status(404).json({ error: 'Item not found' });
-
-    if (type === 'ISSUE') {
-      if (newInventory.currentStock < quantity) {
-        return res.status(400).json({ error: 'Insufficient stock' });
-      }
-      newInventory.currentStock -= quantity;
-    } else if (type === 'RETURN') {
-      newInventory.currentStock += quantity;
-    }
-    await newInventory.save();
 
     transaction.type = type;
     transaction.employee = employee || null;
@@ -156,16 +153,6 @@ router.delete('/:id', authMiddleware, checkPermission('deleteTransactions'), asy
   try {
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
-
-    const inventory = await Inventory.findById(transaction.item);
-    if (inventory) {
-      if (transaction.type === 'ISSUE') {
-        inventory.currentStock += transaction.quantity;
-      } else if (transaction.type === 'RETURN') {
-        inventory.currentStock -= transaction.quantity;
-      }
-      await inventory.save();
-    }
 
     await createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`);
     
