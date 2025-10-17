@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { sendNotification } = require('../utils/onesignal');
 const { authMiddleware } = require('../middlewares/auth');
-const Notification = require('../models/Notification');
-const User = require('../models/User');
+const Notification = require('../models/notification');
+const User = require('../models/user');
 
 router.post('/send', authMiddleware, async (req, res) => {
   try {
