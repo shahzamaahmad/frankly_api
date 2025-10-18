@@ -216,7 +216,10 @@ router.get('/monthly-report', async (req, res) => {
     }
     
     const report = [];
-    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    const today = new Date();
+    const maxDate = endDate < today ? endDate : today;
+    
+    for (let d = new Date(startDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().split('T')[0];
       if (dailyRecords[dateStr]) {
         report.push({
