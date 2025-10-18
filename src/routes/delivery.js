@@ -80,7 +80,7 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
     await d.save();
     
     await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${body.deliveryNumber || d._id}`);
-
+    if (global.io) global.io.emit('delivery:created', d);
     res.status(201).json(d);
   } catch (err) {
     console.error('Create delivery error:', err);
@@ -162,7 +162,7 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
     const updated = await Delivery.findByIdAndUpdate(req.params.id, updateOps, { new: true });
     
     await createLog('EDIT_DELIVERY', req.user.id, req.user.username, `Edited delivery: ${req.params.id}`);
-    
+    if (global.io) global.io.emit('delivery:updated', updated);
     res.json(updated);
   } catch (err) {
     console.error('Update delivery error:', err);
@@ -189,7 +189,7 @@ router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
     await Delivery.findByIdAndDelete(req.params.id);
     
     await createLog('DELETE_DELIVERY', req.user.id, req.user.username, `Deleted delivery: ${req.params.id}`);
-    
+    if (global.io) global.io.emit('delivery:deleted', { id: req.params.id });
     res.json({ message: 'Deleted' });
   } catch (err) {
     console.error('Delete delivery error:', err);

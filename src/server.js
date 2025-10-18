@@ -128,6 +128,8 @@ mongoose.connect(process.env.MONGODB_URI, {
     });
   });
   
+  global.io = io;
+  
   server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   
   server.on('error', (err) => {
