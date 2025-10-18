@@ -50,16 +50,28 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
     }
     
     console.log('POST /deliveries - body.items:', JSON.stringify(body.items));
+    const Transaction = require('../models/transaction');
+    const DeliveryModel = require('../models/delivery');
+    
     if (body.items && Array.isArray(body.items)) {
       for (const item of body.items) {
         console.log('Processing item:', item.itemName, 'quantity:', item.quantity);
         if (item.itemName && item.quantity > 0) {
-          const result = await Inventory.findByIdAndUpdate(
-            item.itemName,
-            { $inc: { currentStock: item.quantity } },
-            { new: true }
-          );
-          console.log('Updated inventory:', result?._id, 'new stock:', result?.currentStock);
+          const inv = await Inventory.findById(item.itemName);
+          if (inv) {
+            const deliveries = await DeliveryModel.find({ 'items.itemName': item.itemName });
+            const totalDelivered = deliveries.reduce((sum, d) => {
+              return sum + d.items.filter(i => i.itemName.toString() === item.itemName).reduce((s, i) => s + i.quantity, 0);
+            }, 0) + item.quantity;
+            
+            const transactions = await Transaction.find({ item: item.itemName });
+            const totalIssued = transactions.filter(t => t.type === 'ISSUE').reduce((sum, t) => sum + t.quantity, 0);
+            const totalReturned = transactions.filter(t => t.type === 'RETURN').reduce((sum, t) => sum + t.quantity, 0);
+            
+            const newStock = inv.initialStock + totalDelivered - totalIssued + totalReturned;
+            await Inventory.findByIdAndUpdate(item.itemName, { currentStock: newStock });
+            console.log('Recalculated stock for:', item.itemName, 'new stock:', newStock);
+          }
         }
       }
     }
@@ -105,6 +117,19 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
 }, async (req, res) => {
   try {
     const body = req.body;
+    
+    const oldDelivery = await Delivery.findById(req.params.id);
+    if (!oldDelivery) return res.status(404).json({ error: 'Delivery not found' });
+    
+    if (oldDelivery.items && Array.isArray(oldDelivery.items)) {
+      for (const item of oldDelivery.items) {
+        await Inventory.findByIdAndUpdate(
+          item.itemName,
+          { $inc: { currentStock: -item.quantity } }
+        );
+      }
+    }
+    
     try {
       if (req.file) {
         body.invoiceImage = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
@@ -113,6 +138,22 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
       console.error('CDN upload failed:', e.message);
       if (req.file) body.invoiceImage = req.file.buffer.toString('base64');
     }
+    
+    if (typeof body.items === 'string') {
+      body.items = JSON.parse(body.items);
+    }
+    
+    if (body.items && Array.isArray(body.items)) {
+      for (const item of body.items) {
+        if (item.itemName && item.quantity > 0) {
+          await Inventory.findByIdAndUpdate(
+            item.itemName,
+            { $inc: { currentStock: item.quantity } }
+          );
+        }
+      }
+    }
+    
     const shouldClearInvoice = typeof body.invoiceImage === 'string' && body.invoiceImage === '';
     if (shouldClearInvoice) delete body.invoiceImage;
     const updateOps = {};
