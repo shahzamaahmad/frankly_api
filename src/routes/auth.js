@@ -152,6 +152,25 @@ router.get('/profile', async (req, res) => {
   }
 });
 
+router.post('/refresh-token', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'No token provided' });
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user.isActive) return res.status(403).json({ message: 'Account is deactivated' });
+    
+    const newToken = jwt.sign({ id: user._id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+    const userObj = user.toObject();
+    res.json({ token: newToken, user: { ...userObj, id: user._id } });
+  } catch (err) {
+    console.error('Refresh token error:', err);
+    res.status(401).json({ message: 'Unauthorized' });
+  }
+});
+
 router.put('/change-password', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
