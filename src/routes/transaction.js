@@ -47,7 +47,7 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
       return res.status(400).json({ error: 'Invalid input data' });
     }
     
-    const inventory = await Inventory.findById(item).lean();
+    const inventory = await Inventory.findById(item);
     if (!inventory) return res.status(404).json({ error: 'Item not found' });
 
     const now = timestamp ? new Date(timestamp) : new Date();
@@ -63,6 +63,13 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
       if (match) nextNum = parseInt(match[1]) + 1;
     }
     const transactionId = `${todayPrefix}${String(nextNum).padStart(4, '0')}`;
+
+    if (type === 'ISSUE') {
+      inventory.currentStock -= quantity;
+    } else if (type === 'RETURN') {
+      inventory.currentStock += quantity;
+    }
+    await inventory.save();
 
     const transaction = new Transaction({
       transactionId,
@@ -102,8 +109,25 @@ router.put('/:id', authMiddleware, checkPermission('editTransactions'), async (r
       return res.status(400).json({ error: 'Invalid input data' });
     }
 
-    const newInventory = await Inventory.findById(item).lean();
+    const oldInventory = await Inventory.findById(transaction.item);
+    if (oldInventory) {
+      if (transaction.type === 'ISSUE') {
+        oldInventory.currentStock += transaction.quantity;
+      } else if (transaction.type === 'RETURN') {
+        oldInventory.currentStock -= transaction.quantity;
+      }
+      await oldInventory.save();
+    }
+
+    const newInventory = await Inventory.findById(item);
     if (!newInventory) return res.status(404).json({ error: 'Item not found' });
+
+    if (type === 'ISSUE') {
+      newInventory.currentStock -= quantity;
+    } else if (type === 'RETURN') {
+      newInventory.currentStock += quantity;
+    }
+    await newInventory.save();
 
     transaction.type = type;
     transaction.employee = employee || null;

@@ -288,4 +288,45 @@ router.delete('/:id', checkPermission('deleteInventory'), async (req, res) => {
   }
 });
 
+// Recalculate stock
+router.post('/:id/recalculate', checkPermission('editInventory'), async (req, res) => {
+  try {
+    const Transaction = require('../models/transaction');
+    const Delivery = require('../models/delivery');
+    const item = await Inventory.findById(req.params.id);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    const [txns, deliveries] = await Promise.all([
+      Transaction.find({ item: req.params.id }),
+      Delivery.find({ 'items.itemName': req.params.id })
+    ]);
+
+    let totalIssued = 0;
+    let totalReturned = 0;
+    let totalDelivered = 0;
+
+    txns.forEach(txn => {
+      if (txn.type === 'ISSUE') totalIssued += txn.quantity;
+      else if (txn.type === 'RETURN') totalReturned += txn.quantity;
+    });
+
+    deliveries.forEach(delivery => {
+      delivery.items.forEach(dItem => {
+        if (dItem.itemName.toString() === req.params.id) {
+          totalDelivered += dItem.quantity;
+        }
+      });
+    });
+
+    const calculatedStock = item.initialStock + totalDelivered - totalIssued + totalReturned;
+    item.currentStock = calculatedStock;
+    await item.save();
+
+    res.json({ currentStock: calculatedStock });
+  } catch (err) {
+    console.error('Recalculate stock error:', err);
+    res.status(500).json({ error: 'Failed to recalculate stock' });
+  }
+});
+
 module.exports = router;
