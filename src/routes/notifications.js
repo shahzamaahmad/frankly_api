@@ -53,7 +53,8 @@ router.get('/received', authMiddleware, async (req, res) => {
       $or: [
         { sentToAll: true },
         { recipients: req.user._id }
-      ]
+      ],
+      dismissedBy: { $ne: req.user._id }
     })
     .populate('sentBy', 'fullName username')
     .sort({ createdAt: -1 })
@@ -67,12 +68,17 @@ router.get('/received', authMiddleware, async (req, res) => {
 
 router.delete('/clear', authMiddleware, async (req, res) => {
   try {
-    await Notification.deleteMany({
-      $or: [
-        { sentToAll: true },
-        { recipients: req.user._id }
-      ]
-    });
+    await Notification.updateMany(
+      {
+        $or: [
+          { sentToAll: true },
+          { recipients: req.user._id }
+        ]
+      },
+      {
+        $addToSet: { dismissedBy: req.user._id }
+      }
+    );
     res.json({ message: 'Notifications cleared' });
   } catch (error) {
     console.error('Clear notifications error:', error);

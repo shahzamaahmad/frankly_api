@@ -8,6 +8,7 @@ const NotificationSchema = new mongoose.Schema({
   sentBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   recipients: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   sentToAll: { type: Boolean, default: false },
+  dismissedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
 NotificationSchema.pre('save', function(next) {
