@@ -20,7 +20,7 @@ const swaggerSpec = loadRoute('./swagger');
 
 let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes, deliveryItemRoutes;
 let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
-let notificationRoutes, logRoutes, onesignalRoutes, groupRoutes, messageRoutes;
+let notificationRoutes, logRoutes, onesignalRoutes;
 
 const initRoutes = () => {
   authRoutes = loadRoute('./routes/auth');
@@ -35,8 +35,6 @@ const initRoutes = () => {
   notificationRoutes = loadRoute('./routes/notification');
   logRoutes = loadRoute('./routes/log');
   onesignalRoutes = loadRoute('./routes/notifications');
-  groupRoutes = loadRoute('./routes/groups');
-  messageRoutes = loadRoute('./routes/messages');
 };
 
 initRoutes();
@@ -86,8 +84,6 @@ try {
   app.use('/api/notifications', authMiddleware, notificationRoutes);
   app.use('/api/logs', authMiddleware, logRoutes);
   app.use('/api/onesignal', authMiddleware, onesignalRoutes);
-  app.use('/api/groups', authMiddleware, groupRoutes);
-  app.use('/api/messages', authMiddleware, messageRoutes);
 } catch (err) {
   console.error('Route setup error:', err);
   process.exit(1);
@@ -125,28 +121,6 @@ mongoose.connect(process.env.MONGODB_URI, {
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
-
-    socket.on('join-group', (groupId) => {
-      socket.join(groupId);
-      console.log(`User ${socket.id} joined group ${groupId}`);
-    });
-
-    socket.on('leave-group', (groupId) => {
-      socket.leave(groupId);
-    });
-
-    socket.on('send-message', (data) => {
-      io.to(data.groupId).emit('new-message', data);
-    });
-
-    socket.on('typing', (data) => {
-      socket.to(data.groupId).emit('user-typing', data);
-    });
-
-    socket.on('stop-typing', (data) => {
-      socket.to(data.groupId).emit('user-stop-typing', data);
-    });
-
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);
     });
