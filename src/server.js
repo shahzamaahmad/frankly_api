@@ -20,7 +20,7 @@ const swaggerSpec = loadRoute('./swagger');
 
 let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes, deliveryItemRoutes;
 let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
-let notificationRoutes, logRoutes, onesignalRoutes;
+let notificationRoutes, logRoutes, onesignalRoutes, contactsRoutes;
 
 const initRoutes = () => {
   authRoutes = loadRoute('./routes/auth');
@@ -35,6 +35,7 @@ const initRoutes = () => {
   notificationRoutes = loadRoute('./routes/notification');
   logRoutes = loadRoute('./routes/log');
   onesignalRoutes = loadRoute('./routes/notifications');
+  contactsRoutes = loadRoute('./routes/contacts');
 };
 
 initRoutes();
@@ -84,6 +85,7 @@ try {
   app.use('/api/notifications', authMiddleware, notificationRoutes);
   app.use('/api/logs', authMiddleware, logRoutes);
   app.use('/api/onesignal', authMiddleware, onesignalRoutes);
+  app.use('/api/contacts', authMiddleware, contactsRoutes);
 } catch (err) {
   console.error('Route setup error:', err);
   process.exit(1);
