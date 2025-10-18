@@ -245,6 +245,38 @@ router.get('/monthly-report', async (req, res) => {
   }
 });
 
+router.put('/:id', async (req, res) => {
+  try {
+    if (!req.user.permissions?.editReportAttendance) {
+      return res.status(403).json({ message: 'Permission denied' });
+    }
+    
+    const { checkIn, checkOut } = req.body;
+    const attendance = await Attendance.findById(req.params.id);
+    
+    if (!attendance) {
+      return res.status(404).json({ message: 'Attendance record not found' });
+    }
+    
+    if (checkIn) attendance.checkIn = new Date(checkIn);
+    if (checkOut) {
+      attendance.checkOut = new Date(checkOut);
+      const workingHours = Math.floor((attendance.checkOut - attendance.checkIn) / 1000);
+      attendance.workingHours = workingHours;
+    } else {
+      attendance.checkOut = null;
+      attendance.workingHours = 0;
+    }
+    
+    await attendance.save();
+    createLog('EDIT_ATTENDANCE', req.user.id, req.user.username, `Edited attendance record`).catch(e => console.error('Log failed:', e));
+    res.json(attendance);
+  } catch (error) {
+    console.error('Update attendance error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     if (!req.user.permissions?.deleteReportAttendance) {
