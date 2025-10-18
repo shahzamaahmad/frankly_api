@@ -24,6 +24,12 @@ mongoose.connect(process.env.MONGODB_URI, {
     headOfficeLocation: 'Dubai, UAE',
     warehouseLocation: 'Dubai, UAE',
     established: '2020',
+    ownerName: 'Shahzama Ahmad',
+    companyFacebook: 'https://facebook.com/franklybuilt',
+    companyInstagram: 'https://instagram.com/franklybuilt',
+    companyLinkedIn: 'https://linkedin.com/company/franklybuilt',
+    companyTwitter: 'https://twitter.com/franklybuilt',
+    companyTikTok: 'https://tiktok.com/@franklybuilt',
     
     appVersion: '1.0.0',
     appName: 'Frankly',

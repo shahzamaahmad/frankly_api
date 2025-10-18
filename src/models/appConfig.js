@@ -12,6 +12,12 @@ const AppConfigSchema = new mongoose.Schema({
   headOfficeLocation: { type: String, default: '' },
   warehouseLocation: { type: String, default: '' },
   established: { type: String, default: '' },
+  ownerName: { type: String, default: '' },
+  companyFacebook: { type: String, default: '' },
+  companyInstagram: { type: String, default: '' },
+  companyLinkedIn: { type: String, default: '' },
+  companyTwitter: { type: String, default: '' },
+  companyTikTok: { type: String, default: '' },
   
   appVersion: { type: String, default: '1.0.0' },
   appName: { type: String, default: 'Frankly' },

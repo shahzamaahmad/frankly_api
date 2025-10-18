@@ -41,13 +41,17 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
       else if (body.invoiceBase64) body.invoiceImage = body.invoiceBase64;
     }
     
+    console.log('POST /deliveries - body.items:', JSON.stringify(body.items));
     if (body.items && Array.isArray(body.items)) {
       for (const item of body.items) {
+        console.log('Processing item:', item.itemName, 'quantity:', item.quantity);
         if (item.itemName && item.quantity > 0) {
-          await Inventory.findByIdAndUpdate(
+          const result = await Inventory.findByIdAndUpdate(
             item.itemName,
-            { $inc: { currentStock: item.quantity } }
+            { $inc: { currentStock: item.quantity } },
+            { new: true }
           );
+          console.log('Updated inventory:', result?._id, 'new stock:', result?.currentStock);
         }
       }
     }
