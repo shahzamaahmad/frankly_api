@@ -118,6 +118,9 @@ router.get('/', checkPermission('viewInventory'), async (req, res) => {
     const filters = {};
     if (req.query.type && typeof req.query.type === 'string') filters.type = req.query.type;
     if (req.query.origin && typeof req.query.origin === 'string') filters.origin = req.query.origin;
+    if (req.query.updatedAfter && typeof req.query.updatedAfter === 'string') {
+      filters.updatedAt = { $gt: new Date(req.query.updatedAfter) };
+    }
     
     const list = await Inventory.find(filters).lean();
     const itemIds = list.map(i => i._id);
