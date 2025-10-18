@@ -18,7 +18,7 @@ const swaggerSpec = loadRoute('./swagger');
 
 
 
-let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes, deliveryItemRoutes;
+let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes;
 let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
 let notificationRoutes, logRoutes, onesignalRoutes, contactsRoutes;
 
@@ -27,7 +27,6 @@ const initRoutes = () => {
   inventoryRoutes = loadRoute('./routes/inventory');
   siteRoutes = loadRoute('./routes/site');
   deliveryRoutes = loadRoute('./routes/delivery');
-  deliveryItemRoutes = loadRoute('./routes/deliveryItem');
   uploadsRoutes = loadRoute('./routes/uploads');
   usersRoutes = loadRoute('./routes/users');
   transactionRoutes = loadRoute('./routes/transaction');
@@ -77,7 +76,6 @@ try {
   app.use('/api/inventory', authMiddleware, inventoryRoutes);
   app.use('/api/sites', authMiddleware, siteRoutes);
   app.use('/api/deliveries', authMiddleware, deliveryRoutes);
-  app.use('/api/delivery-items', authMiddleware, deliveryItemRoutes);
   app.use('/api/uploads', authMiddleware, uploadsRoutes);
   app.use('/api/users', authMiddleware, usersRoutes);
   app.use('/api/transactions', authMiddleware, transactionRoutes);
