@@ -149,34 +149,24 @@ router.get('/today', async (req, res) => {
     const clientDate = req.query.date;
     const date = clientDate || new Date().toISOString().split('T')[0];
     
-    if (req.user.permissions?.viewReportAttendance) {
-      const records = await Attendance.find({ date })
-        .populate('user', 'fullName username')
-        .select('user checkIn checkOut workingHours date sessionNumber')
-        .sort({ checkIn: -1 })
-        .lean();
-      
-      res.json({ records });
-    } else {
-      const records = await Attendance.find({ date, user: req.user.id })
-        .populate('user', 'fullName username')
-        .select('user checkIn checkOut workingHours date sessionNumber')
-        .sort({ checkIn: -1 })
-        .lean();
-      
-      let totalSeconds = 0;
-      const now = new Date();
-      for (const record of records) {
-        if (record.checkOut) {
-          totalSeconds += record.workingHours;
-        } else {
-          const elapsed = Math.floor((now - new Date(record.checkIn)) / 1000);
-          totalSeconds += Math.max(0, elapsed);
-        }
+    const records = await Attendance.find({ date, user: req.user.id })
+      .populate('user', 'fullName username')
+      .select('user checkIn checkOut workingHours date sessionNumber checkInLocation checkOutLocation')
+      .sort({ checkIn: -1 })
+      .lean();
+    
+    let totalSeconds = 0;
+    const now = new Date();
+    for (const record of records) {
+      if (record.checkOut) {
+        totalSeconds += record.workingHours;
+      } else {
+        const elapsed = Math.floor((now - new Date(record.checkIn)) / 1000);
+        totalSeconds += Math.max(0, elapsed);
       }
-      
-      res.json({ records, totalWorkingSeconds: totalSeconds });
     }
+    
+    res.json({ records, totalWorkingSeconds: totalSeconds });
   } catch (error) {
     console.error('Get today attendance error:', error.message, error.stack);
     res.status(500).json({ message: 'Internal server error', error: error.message });
