@@ -46,8 +46,8 @@ const UserSchema = new mongoose.Schema({
     viewReportAttendance: { type: Boolean, default: false },
     editReportAttendance: { type: Boolean, default: false },
     deleteReportAttendance: { type: Boolean, default: false },
-    viewNotificationCard: { type: Boolean, default: false },
-    sendNotifications: { type: Boolean, default: false },
+    viewOnesignalCard: { type: Boolean, default: false },
+    onesignalSendButton: { type: Boolean, default: false },
     viewEmployeeTracking: { type: Boolean, default: false },
   },
 

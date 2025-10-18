@@ -4,7 +4,7 @@ const Alert = require('../models/alert');
 const checkPermission = require('../middlewares/checkPermission');
 const { authMiddleware } = require('../middlewares/auth');
 
-router.get('/', checkPermission('viewNotificationCard'), async (req, res) => {
+router.get('/', checkPermission('viewOnesignalCard'), async (req, res) => {
   try {
     const now = new Date();
     const alerts = await Alert.find({

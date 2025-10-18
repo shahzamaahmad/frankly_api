@@ -6,7 +6,7 @@ const checkPermission = require('../middlewares/checkPermission');
 const Alert = require('../models/alert');
 const User = require('../models/user');
 
-router.post('/send', authMiddleware, checkPermission('sendNotifications'), async (req, res) => {
+router.post('/send', authMiddleware, checkPermission('onesignalSendButton'), async (req, res) => {
   try {
     const { title, message, userIds, subtitle, imageUrl, actionButtons, launchUrl, data, priority, ttl, sendAfter } = req.body;
 
