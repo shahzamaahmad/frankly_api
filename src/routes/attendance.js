@@ -301,7 +301,7 @@ router.delete('/:id', async (req, res) => {
 
 router.get('/active-locations', async (req, res) => {
   try {
-    if (!req.user.permissions?.viewReportAttendance) {
+    if (!req.user.permissions?.viewEmployeeTracking) {
       return res.status(403).json({ message: 'Permission denied' });
     }
     
