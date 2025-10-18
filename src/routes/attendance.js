@@ -122,6 +122,10 @@ router.put('/checkout/:id', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
+    if (!req.user.permissions?.viewReportAttendance) {
+      return res.status(403).json({ message: 'Permission denied' });
+    }
+    
     const { date, userId } = req.query;
     const query = {};
     
@@ -170,6 +174,10 @@ router.get('/today', async (req, res) => {
 
 router.get('/monthly-report', async (req, res) => {
   try {
+    if (!req.user.permissions?.viewReportAttendance) {
+      return res.status(403).json({ message: 'Permission denied' });
+    }
+    
     const { userId, year, month } = req.query;
     
     if (!userId || !year || !month) {
@@ -229,6 +237,10 @@ router.get('/monthly-report', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
+    if (!req.user.permissions?.deleteReportAttendance) {
+      return res.status(403).json({ message: 'Permission denied' });
+    }
+    
     const attendance = await Attendance.findByIdAndDelete(req.params.id);
     if (!attendance) {
       return res.status(404).json({ message: 'Attendance record not found' });
