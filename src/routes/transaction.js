@@ -50,34 +50,6 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
     const inventory = await Inventory.findById(item).lean();
     if (!inventory) return res.status(404).json({ error: 'Item not found' });
 
-    if (type === 'ISSUE') {
-      const User = require('../models/user');
-      const [txnAgg, userAgg] = await Promise.all([
-        Transaction.aggregate([
-          { $match: { item: inventory._id } },
-          { $group: {
-            _id: null,
-            issued: { $sum: { $cond: [{ $eq: ['$type', 'ISSUE'] }, '$quantity', 0] } },
-            returned: { $sum: { $cond: [{ $eq: ['$type', 'RETURN'] }, '$quantity', 0] } }
-          }}
-        ]),
-        User.aggregate([
-          { $match: { 'assets.item': inventory._id } },
-          { $unwind: '$assets' },
-          { $match: { 'assets.item': inventory._id } },
-          { $group: { _id: null, total: { $sum: '$assets.quantity' } } }
-        ])
-      ]);
-      
-      const txn = txnAgg[0] || { issued: 0, returned: 0 };
-      const assigned = userAgg[0]?.total || 0;
-      const currentStock = (inventory.initialStock || 0) - txn.issued + txn.returned - assigned;
-      
-      if (currentStock < quantity) {
-        return res.status(400).json({ error: 'Insufficient stock' });
-      }
-    }
-
     const lastTransaction = await Transaction.findOne().sort({ transactionId: -1 });
     let nextNum = 1;
     if (lastTransaction) {
