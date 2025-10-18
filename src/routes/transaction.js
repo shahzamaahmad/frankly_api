@@ -133,6 +133,16 @@ router.delete('/:id', authMiddleware, checkPermission('deleteTransactions'), asy
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
+    const inventory = await Inventory.findById(transaction.item);
+    if (inventory) {
+      if (transaction.type === 'ISSUE') {
+        inventory.currentStock += transaction.quantity;
+      } else if (transaction.type === 'RETURN') {
+        inventory.currentStock -= transaction.quantity;
+      }
+      await inventory.save();
+    }
+
     await createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`);
     
     await Transaction.findByIdAndDelete(req.params.id);
