@@ -296,10 +296,16 @@ router.get('/active-locations', async (req, res) => {
       return res.status(403).json({ message: 'Permission denied' });
     }
     
-    const allRecords = await Attendance.find({ checkOut: null })
+    const allRecords = await Attendance.find({ 
+      checkOut: null,
+      checkIn: { $exists: true }
+    })
       .populate('user', 'fullName username')
       .lean();
-    console.log('Total active employees (not checked out):', allRecords.length);
+    console.log('Active employees query result:', allRecords.length);
+    allRecords.forEach(r => {
+      console.log(`- ${r.user?.fullName}: checkIn=${r.checkIn}, checkOut=${r.checkOut}`);
+    });
     
     res.json(allRecords);
   } catch (error) {
