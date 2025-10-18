@@ -29,6 +29,7 @@ router.get('/:id', checkPermission('viewEmployees'), async (req, res) => {
 router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
   try {
     const updates = { ...req.body };
+    console.log('Updating user:', req.params.id, 'with permissions:', updates.permissions);
     
     if (updates.username && updates.username.length < 3) {
       return res.status(400).json({ message: 'Username must be at least 3 characters' });
@@ -41,6 +42,7 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     
     const permissionsChanged = updates.permissions && JSON.stringify(user.permissions) !== JSON.stringify(updates.permissions);
+    console.log('Permissions changed:', permissionsChanged);
     
     if (updates.password) {
       user.password = updates.password;
