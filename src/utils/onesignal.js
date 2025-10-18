@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const sendNotification = async (options) => {
+const sendAlert = async (options) => {
   try {
     if (!process.env.ONESIGNAL_REST_API_KEY) {
       throw new Error('ONESIGNAL_REST_API_KEY is not set in environment variables');
@@ -41,7 +41,7 @@ const sendNotification = async (options) => {
     if (ttl) payload.ttl = ttl;
     if (sendAfter) payload.send_after = sendAfter;
 
-    console.log('Sending OneSignal notification with payload:', JSON.stringify(payload, null, 2));
+    console.log('Sending OneSignal alert with payload:', JSON.stringify(payload, null, 2));
     console.log('Using API Key (first 20 chars):', process.env.ONESIGNAL_REST_API_KEY.substring(0, 20));
 
     const response = await axios.post(
@@ -67,4 +67,4 @@ const sendNotification = async (options) => {
   }
 };
 
-module.exports = { sendNotification };
+module.exports = { sendAlert };
