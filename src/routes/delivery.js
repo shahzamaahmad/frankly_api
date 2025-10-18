@@ -78,7 +78,7 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
 
 router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
   try {
-    const list = await Delivery.find().populate('items.itemName');
+    const list = await Delivery.find().populate('items.itemName', 'name sku');
     res.json(list);
   } catch (err) {
     console.error('Get deliveries error:', err);
@@ -88,7 +88,7 @@ router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
 
 router.get('/:id', checkPermission('viewDeliveries'), async (req, res) => {
   try {
-    const item = await Delivery.findById(req.params.id).populate('items.itemName');
+    const item = await Delivery.findById(req.params.id).populate('items.itemName', 'name sku');
     if (!item) return res.status(404).json({ error: 'Delivery not found' });
     res.json(item);
   } catch (err) {
