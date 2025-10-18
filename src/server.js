@@ -93,7 +93,7 @@ try {
 
 app.use((err, req, res, _next) => {
   console.error('Error:', err.stack);
-  res.status(err.status || 500).json({ 
+  res.status(err.status || 500).json({
     error: err.message || 'Internal server error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
@@ -122,7 +122,7 @@ mongoose.connect(process.env.MONGODB_URI, {
   });
 
   const jwt = require('jsonwebtoken');
-  
+
   io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) {
@@ -144,16 +144,16 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.log('✅ User connected:', socket.id, 'userId:', socket.userId);
     socket.join(`user:${socket.userId}`);
     console.log('User joined room: user:' + socket.userId);
-    
+
     socket.on('disconnect', () => {
       console.log('❌ User disconnected:', socket.id);
     });
   });
-  
+
   global.io = io;
-  
+
   server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  
+
   server.on('error', (err) => {
     console.error('Server error:', err);
     process.exit(1);

@@ -18,22 +18,4 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.put('/', async (req, res) => {
-  try {
-    let config = await AppConfig.findOne({ isSingleton: true });
-    if (!config) {
-      config = new AppConfig(req.body);
-      config.isSingleton = true;
-    } else {
-      Object.assign(config, req.body);
-      config.isSingleton = true;
-    }
-    await config.save();
-    res.json(config);
-  } catch (err) {
-    console.error('Update app config error:', err);
-    res.status(400).json({ error: 'Failed to update app config' });
-  }
-});
-
 module.exports = router;
