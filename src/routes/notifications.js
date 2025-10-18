@@ -2,10 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { sendNotification } = require('../utils/onesignal');
 const { authMiddleware } = require('../middlewares/auth');
+const { checkPermission } = require('../middlewares/checkPermission');
 const Notification = require('../models/notification');
 const User = require('../models/user');
 
-router.post('/send', authMiddleware, async (req, res) => {
+router.post('/send', authMiddleware, checkPermission('sendNotifications'), async (req, res) => {
   try {
     const { title, message, userIds, subtitle, imageUrl, actionButtons, launchUrl, data, priority, ttl, sendAfter } = req.body;
 
