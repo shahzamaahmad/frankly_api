@@ -8,7 +8,11 @@ const DeliverySchema = new mongoose.Schema({
   receivedBy: { type: String },
   remarks: { type: String },
   invoiceImage: { type: String },
-  invoiceNumber: { type: String }
+  invoiceNumber: { type: String },
+  items: [{
+    itemName: { type: mongoose.Schema.Types.ObjectId, ref: 'Inventory', required: true },
+    quantity: { type: Number, required: true, min: 1 }
+  }]
 }, { timestamps: true });
 
 DeliverySchema.index({ deliveryDate: -1 });

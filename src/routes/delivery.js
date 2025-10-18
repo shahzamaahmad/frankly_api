@@ -2,7 +2,6 @@
 const express = require('express');
 const router = express.Router();
 const Delivery = require('../models/delivery');
-const DeliveryItem = require('../models/deliveryItem');
 const Inventory = require('../models/inventory');
 const multer = require('multer');
 const upload = multer({
@@ -41,28 +40,22 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
       if (req.file) body.invoiceImage = req.file.buffer.toString('base64');
       else if (body.invoiceBase64) body.invoiceImage = body.invoiceBase64;
     }
+    
+    if (body.items && Array.isArray(body.items)) {
+      for (const item of body.items) {
+        if (item.itemName && item.quantity > 0) {
+          await Inventory.findByIdAndUpdate(
+            item.itemName,
+            { $inc: { currentStock: item.quantity } }
+          );
+        }
+      }
+    }
+    
     const d = new Delivery(body);
     await d.save();
     
     await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${body.deliveryNumber || d._id}`);
-
-    if (body.items && Array.isArray(body.items)) {
-      for (const item of body.items) {
-        if (!item.itemName || !item.quantity || item.quantity <= 0) continue;
-        
-        const deliveryItem = new DeliveryItem({
-          deliveryId: d._id,
-          itemName: item.itemName,
-          quantity: item.quantity
-        });
-        await deliveryItem.save();
-
-        await Inventory.findByIdAndUpdate(
-          item.itemName,
-          { $inc: { currentStock: item.quantity } }
-        );
-      }
-    }
 
     res.status(201).json(d);
   } catch (err) {
@@ -73,7 +66,7 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
 
 router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
   try {
-    const list = await Delivery.find();
+    const list = await Delivery.find().populate('items.itemName');
     res.json(list);
   } catch (err) {
     console.error('Get deliveries error:', err);
@@ -83,7 +76,7 @@ router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
 
 router.get('/:id', checkPermission('viewDeliveries'), async (req, res) => {
   try {
-    const item = await Delivery.findById(req.params.id);
+    const item = await Delivery.findById(req.params.id).populate('items.itemName');
     if (!item) return res.status(404).json({ error: 'Delivery not found' });
     res.json(item);
   } catch (err) {
@@ -131,16 +124,15 @@ router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
       return res.status(404).json({ error: 'Delivery not found' });
     }
     
-    const deliveryItems = await DeliveryItem.find({ deliveryId: req.params.id });
-    
-    for (const item of deliveryItems) {
-      await Inventory.findByIdAndUpdate(
-        item.itemName,
-        { $inc: { currentStock: -item.quantity } }
-      );
+    if (delivery.items && Array.isArray(delivery.items)) {
+      for (const item of delivery.items) {
+        await Inventory.findByIdAndUpdate(
+          item.itemName,
+          { $inc: { currentStock: -item.quantity } }
+        );
+      }
     }
 
-    await DeliveryItem.deleteMany({ deliveryId: req.params.id });
     await Delivery.findByIdAndDelete(req.params.id);
     
     await createLog('DELETE_DELIVERY', req.user.id, req.user.username, `Deleted delivery: ${req.params.id}`);
