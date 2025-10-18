@@ -3,8 +3,6 @@ const router = express.Router();
 const { sendAlert } = require('../utils/onesignal');
 const { authMiddleware } = require('../middlewares/auth');
 const checkPermission = require('../middlewares/checkPermission');
-const Alert = require('../models/alert');
-const User = require('../models/user');
 
 router.post('/send', authMiddleware, checkPermission('onesignalSendButton'), async (req, res) => {
   try {
@@ -29,16 +27,6 @@ router.post('/send', authMiddleware, checkPermission('onesignalSendButton'), asy
       ttl,
       sendAfter,
     });
-
-    const alert = new Alert({
-      title,
-      message,
-      sendingDate: new Date(),
-      sentBy: req.user._id,
-      sentToAll: !userIds || userIds.length === 0,
-      recipients: userIds && userIds.length > 0 ? userIds : await User.find({ isActive: true }).distinct('_id'),
-    });
-    await alert.save();
 
     res.json({ success: true, data: result });
   } catch (error) {

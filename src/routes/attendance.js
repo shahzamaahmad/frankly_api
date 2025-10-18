@@ -292,19 +292,26 @@ router.delete('/:id', async (req, res) => {
 
 router.get('/active-locations', async (req, res) => {
   try {
-    if (!req.user.permissions?.viewEmployeeTracking) {
+    if (!req.user.permissions?.viewEmployeeTracking && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Permission denied' });
     }
     
     const today = new Date().toISOString().split('T')[0];
     console.log('Fetching active locations for date:', today);
     
+    const allRecords = await Attendance.find({ checkOut: null })
+      .populate('user', 'fullName username')
+      .lean();
+    console.log('Total records without checkout:', allRecords.length);
+    
     const activeRecords = await Attendance.find({ date: today, checkOut: null })
       .populate('user', 'fullName username')
-      .select('user checkIn checkOut checkInLocation checkOutLocation')
       .lean();
     
-    console.log('Found active records:', activeRecords.length);
+    console.log('Found active records for today:', activeRecords.length);
+    if (activeRecords.length > 0) {
+      console.log('Sample record:', JSON.stringify(activeRecords[0]));
+    }
     res.json(activeRecords);
   } catch (error) {
     console.error('Get active locations error:', error.message, error.stack);
