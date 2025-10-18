@@ -40,12 +40,18 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
+    const permissionsChanged = updates.permissions && JSON.stringify(user.permissions) !== JSON.stringify(updates.permissions);
+    
     if (updates.password) {
       user.password = updates.password;
       delete updates.password;
     }
     Object.assign(user, updates);
     await user.save();
+    
+    if (permissionsChanged && global.io) {
+      global.io.to(`user:${req.params.id}`).emit('permissionsUpdated', { permissions: user.permissions });
+    }
     
     const userObj = user.toObject();
     delete userObj.password;
