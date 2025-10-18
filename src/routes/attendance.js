@@ -297,11 +297,14 @@ router.get('/active-locations', async (req, res) => {
     }
     
     const today = new Date().toISOString().split('T')[0];
+    console.log('Fetching active locations for date:', today);
+    
     const activeRecords = await Attendance.find({ date: today, checkOut: null })
       .populate('user', 'fullName username')
-      .select('user checkIn checkInLocation')
+      .select('user checkIn checkOut checkInLocation checkOutLocation')
       .lean();
     
+    console.log('Found active records:', activeRecords.length);
     res.json(activeRecords);
   } catch (error) {
     console.error('Get active locations error:', error.message, error.stack);

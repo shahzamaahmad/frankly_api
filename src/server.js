@@ -20,7 +20,7 @@ const swaggerSpec = loadRoute('./swagger');
 
 let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes;
 let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
-let alertRoutes, logRoutes, onesignalRoutes, contactsRoutes, appConfigRoutes;
+let logRoutes, onesignalRoutes, contactsRoutes, appConfigRoutes;
 
 const initRoutes = () => {
   authRoutes = loadRoute('./routes/auth');
@@ -31,7 +31,6 @@ const initRoutes = () => {
   usersRoutes = loadRoute('./routes/users');
   transactionRoutes = loadRoute('./routes/transaction');
   attendanceRoutes = loadRoute('./routes/attendance');
-  alertRoutes = loadRoute('./routes/alert');
   logRoutes = loadRoute('./routes/log');
   onesignalRoutes = loadRoute('./routes/onesignal');
   contactsRoutes = loadRoute('./routes/contacts');
@@ -81,7 +80,6 @@ try {
   app.use('/api/users', authMiddleware, usersRoutes);
   app.use('/api/transactions', authMiddleware, transactionRoutes);
   app.use('/api/attendance', authMiddleware, attendanceRoutes);
-  app.use('/api/alerts', authMiddleware, alertRoutes);
   app.use('/api/logs', authMiddleware, logRoutes);
   app.use('/api/onesignal', authMiddleware, onesignalRoutes);
   app.use('/api/contacts', authMiddleware, contactsRoutes);
