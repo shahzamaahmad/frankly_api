@@ -296,23 +296,12 @@ router.get('/active-locations', async (req, res) => {
       return res.status(403).json({ message: 'Permission denied' });
     }
     
-    const today = new Date().toISOString().split('T')[0];
-    console.log('Fetching active locations for date:', today);
-    
     const allRecords = await Attendance.find({ checkOut: null })
       .populate('user', 'fullName username')
       .lean();
-    console.log('Total records without checkout:', allRecords.length);
+    console.log('Total active employees (not checked out):', allRecords.length);
     
-    const activeRecords = await Attendance.find({ date: today, checkOut: null })
-      .populate('user', 'fullName username')
-      .lean();
-    
-    console.log('Found active records for today:', activeRecords.length);
-    if (activeRecords.length > 0) {
-      console.log('Sample record:', JSON.stringify(activeRecords[0]));
-    }
-    res.json(activeRecords);
+    res.json(allRecords);
   } catch (error) {
     console.error('Get active locations error:', error.message, error.stack);
     res.status(500).json({ message: 'Internal server error', error: error.message });
