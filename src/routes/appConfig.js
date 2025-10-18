@@ -2,7 +2,6 @@
 const express = require('express');
 const router = express.Router();
 const AppConfig = require('../models/appConfig');
-const checkPermission = require('../middlewares/checkPermission');
 
 router.get('/', async (req, res) => {
   try {

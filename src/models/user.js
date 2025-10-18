@@ -84,12 +84,10 @@ UserSchema.pre('save', async function (next) {
 
 UserSchema.statics.generateUsername = function (firstName, lastName) {
   let baseUsername = '';
-  if (firstName && lastName) {
-    baseUsername = `${firstName}${lastName}`.toLowerCase();
+  if (lastName) {
+    baseUsername = lastName.toLowerCase();
   } else if (firstName) {
     baseUsername = firstName.toLowerCase();
-  } else if (lastName) {
-    baseUsername = lastName.toLowerCase();
   } else {
     baseUsername = 'user';
   }

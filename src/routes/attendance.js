@@ -42,14 +42,14 @@ const { createLog } = require('../utils/logger');
 
 router.post('/checkin', async (req, res) => {
   try {
-    const { latitude, longitude, address, date, checkInTime } = req.body;
+    const { latitude, longitude, address } = req.body;
     
     if (!latitude || !longitude || !address) {
       return res.status(400).json({ message: 'Location data is required' });
     }
     
-    const recordCheckIn = checkInTime ? new Date(checkInTime) : new Date();
-    const recordDate = date || new Date().toISOString().split('T')[0];
+    const recordCheckIn = new Date();
+    const recordDate = recordCheckIn.toISOString().split('T')[0];
     console.log(`/checkin - Using date: ${recordDate}, checkInTime: ${recordCheckIn}`);
     
     const openAttendance = await Attendance.findOne({
@@ -105,7 +105,7 @@ router.put('/checkout/:id', async (req, res) => {
       return res.status(404).json({ message: 'Attendance record not found' });
     }
     
-    const recordCheckOut = checkOutTime ? new Date(checkOutTime) : new Date();
+    const recordCheckOut = new Date();
     const workingHours = Math.floor((recordCheckOut - attendance.checkIn) / 1000);
     
     attendance.checkOut = recordCheckOut;

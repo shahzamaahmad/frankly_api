@@ -1,6 +1,8 @@
 
 require('dotenv').config();
 
+process.env.TZ = 'Asia/Dubai';
+
 const loadRoute = (path) => {
   try {
     return require(path);
