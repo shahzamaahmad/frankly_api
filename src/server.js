@@ -125,22 +125,28 @@ mongoose.connect(process.env.MONGODB_URI, {
   
   io.use((socket, next) => {
     const token = socket.handshake.auth.token;
-    if (!token) return next(new Error('Authentication error'));
+    if (!token) {
+      console.log('Socket auth failed: no token');
+      return next(new Error('Authentication error'));
+    }
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       socket.userId = decoded.id;
+      console.log('Socket authenticated for user:', decoded.id);
       next();
     } catch (err) {
+      console.log('Socket auth failed:', err.message);
       next(new Error('Authentication error'));
     }
   });
 
   io.on('connection', (socket) => {
-    console.log('User connected:', socket.id, 'userId:', socket.userId);
+    console.log('✅ User connected:', socket.id, 'userId:', socket.userId);
     socket.join(`user:${socket.userId}`);
+    console.log('User joined room: user:' + socket.userId);
     
     socket.on('disconnect', () => {
-      console.log('User disconnected:', socket.id);
+      console.log('❌ User disconnected:', socket.id);
     });
   });
   
