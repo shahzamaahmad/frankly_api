@@ -212,6 +212,7 @@ router.get('/monthly-report', async (req, res) => {
     
     for (let d = new Date(startDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().split('T')[0];
+      const isSunday = d.getDay() === 0;
       if (dailyRecords[dateStr]) {
         report.push({
           date: dateStr,
@@ -222,7 +223,7 @@ router.get('/monthly-report', async (req, res) => {
       } else {
         report.push({
           date: dateStr,
-          status: 'absent',
+          status: isSunday ? 'rest' : 'absent',
           sessions: [],
           totalWorkingHours: 0
         });
