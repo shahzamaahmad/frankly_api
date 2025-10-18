@@ -29,10 +29,6 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
   try {
     const body = req.body;
     
-    if (!body.deliveryNumber || !body.supplier) {
-      return res.status(400).json({ error: 'Delivery number and supplier are required' });
-    }
-    
     try {
       if (req.file) {
         body.invoiceImage = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');

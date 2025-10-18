@@ -2,28 +2,35 @@
 const fs = require('fs');
 const csv = require('csv-parser');
 const mongoose = require('mongoose');
-const Inventory = require('./models/inventory');
+const Inventory = require('../src/models/inventory');
 require('dotenv').config();
 
-mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error(err));
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/warehouse_db')
+  .then(() => console.log('Connected to MongoDB\n'))
+  .catch(err => { console.error(err); process.exit(1); });
 
 const results = [];
-fs.createReadStream('inventory.csv')
+let imported = 0;
+let skipped = 0;
+
+fs.createReadStream('../InventoryItem.csv')
   .pipe(csv())
   .on('data', (data) => {
+    const sku = data['Sku']?.trim();
+    const name = data['Item']?.trim();
+    if (!sku || !name) return;
+    
     results.push({
-      sku: data['sku'],
-      itemName: data['itemName'],
-      type: data['type'],
-      origin: data['origin'],
-      initialStock: data['initialStock'],
-      currentStock: data['currentStock'],
-      uom: data['uom'],
-      size: data['size'],
-      Remark: data['remark'],
-      Image: data['image']
+      sku,
+      name,
+      category: data['Type']?.trim() || 'General',
+      origin: data['Origin']?.trim() || 'DXB',
+      initialStock: parseInt(data['Initial Stock']) || 0,
+      currentStock: parseInt(data['Current Stock']) || 0,
+      unitOfMeasure: data['UoM']?.trim() || 'PCS',
+      size: data['Size']?.trim() || '',
+      remark: data['Remark ']?.trim() || '',
+      imageUrl: data['Image']?.trim() || ''
     });
   })
   .on('error', (err) => {
@@ -32,13 +39,27 @@ fs.createReadStream('inventory.csv')
   })
   .on('end', async () => {
     try {
-      if (results.length === 0) {
-        console.log('No data to import');
-        process.exit(0);
-        return;
+      console.log(`Processing ${results.length} items...\n`);
+      
+      for (const item of results) {
+        try {
+          const existing = await Inventory.findOne({ sku: item.sku });
+          if (existing) {
+            skipped++;
+            continue;
+          }
+          await Inventory.create(item);
+          imported++;
+          console.log(`Imported: ${item.name}`);
+        } catch (err) {
+          console.log(`Error importing ${item.name}: ${err.message}`);
+        }
       }
-      await Inventory.insertMany(results, { ordered: false });
-      console.log('Data imported successfully for inventory');
+      
+      console.log(`\n=== Import Summary ===`);
+      console.log(`Imported: ${imported}`);
+      console.log(`Skipped (already exists): ${skipped}`);
+      console.log(`Total: ${results.length}`);
       process.exit(0);
     } catch (err) {
       console.error('Import error:', err.message);
