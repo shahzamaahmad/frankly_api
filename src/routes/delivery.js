@@ -28,6 +28,10 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
   try {
     const body = req.body;
     
+    if (body.deliveryDate && typeof body.deliveryDate === 'string') {
+      body.deliveryDate = new Date(body.deliveryDate);
+    }
+    
     try {
       if (req.file) {
         body.invoiceImage = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');

@@ -41,7 +41,7 @@ router.get('/:id', authMiddleware, checkPermission('viewTransactions'), async (r
 
 router.post('/', authMiddleware, checkPermission('addTransactions'), async (req, res) => {
   try {
-    const { type, employee, site, item, quantity, returnDetails, relatedTo } = req.body;
+    const { type, employee, site, item, quantity, returnDetails, relatedTo, timestamp } = req.body;
     
     if (!type || !site || !item || !quantity || quantity <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
@@ -50,8 +50,12 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
     const inventory = await Inventory.findById(item).lean();
     if (!inventory) return res.status(404).json({ error: 'Item not found' });
 
-    const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const todayPrefix = `TXN-${today}-`;
+    const now = timestamp ? new Date(timestamp) : new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = now.getFullYear();
+    const dateStr = `${dd}${mm}${yyyy}`;
+    const todayPrefix = `TXN-${dateStr}-`;
     const lastTransaction = await Transaction.findOne({ transactionId: { $regex: `^${todayPrefix}` } }).sort({ transactionId: -1 });
     let nextNum = 1;
     if (lastTransaction) {
@@ -68,7 +72,8 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
       item,
       quantity,
       returnDetails,
-      relatedTo
+      relatedTo,
+      timestamp: now
     });
 
     await transaction.save();
