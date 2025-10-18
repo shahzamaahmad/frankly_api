@@ -53,6 +53,20 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
     const Transaction = require('../models/transaction');
     const DeliveryModel = require('../models/delivery');
     
+    const now = new Date();
+    const dd = String(now.getDate()).padLeft(2, '0');
+    const mm = String(now.getMonth() + 1).padLeft(2, '0');
+    const yyyy = now.getFullYear();
+    const dateStr = `${dd}${mm}${yyyy}`;
+    const todayPrefix = `DEL-${dateStr}-`;
+    const lastDelivery = await Delivery.findOne({ deliveryId: { $regex: `^${todayPrefix}` } }).sort({ deliveryId: -1 });
+    let nextNum = 1;
+    if (lastDelivery) {
+      const match = lastDelivery.deliveryId.match(/-(\d+)$/);
+      if (match) nextNum = parseInt(match[1]) + 1;
+    }
+    body.deliveryId = `${todayPrefix}${String(nextNum).padStart(4, '0')}`;
+    
     if (body.items && Array.isArray(body.items)) {
       for (const item of body.items) {
         console.log('Processing item:', item.itemName, 'quantity:', item.quantity);

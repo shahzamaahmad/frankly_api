@@ -2,6 +2,7 @@
 const mongoose = require('mongoose');
 
 const DeliverySchema = new mongoose.Schema({
+  deliveryId: { type: String, unique: true },
   deliveryDate: { type: Date },
   seller: { type: String },
   amount: { type: Number },
