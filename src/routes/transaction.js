@@ -50,13 +50,15 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
     const inventory = await Inventory.findById(item).lean();
     if (!inventory) return res.status(404).json({ error: 'Item not found' });
 
-    const lastTransaction = await Transaction.findOne().sort({ transactionId: -1 });
+    const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const todayPrefix = `TXN-${today}-`;
+    const lastTransaction = await Transaction.findOne({ transactionId: { $regex: `^${todayPrefix}` } }).sort({ transactionId: -1 });
     let nextNum = 1;
     if (lastTransaction) {
       const match = lastTransaction.transactionId.match(/-(\d+)$/);
       if (match) nextNum = parseInt(match[1]) + 1;
     }
-    const transactionId = `TXN-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${String(nextNum).padStart(4, '0')}`;
+    const transactionId = `${todayPrefix}${String(nextNum).padStart(4, '0')}`;
 
     const transaction = new Transaction({
       transactionId,

@@ -41,6 +41,10 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
       else if (body.invoiceBase64) body.invoiceImage = body.invoiceBase64;
     }
     
+    if (typeof body.items === 'string') {
+      body.items = JSON.parse(body.items);
+    }
+    
     console.log('POST /deliveries - body.items:', JSON.stringify(body.items));
     if (body.items && Array.isArray(body.items)) {
       for (const item of body.items) {
