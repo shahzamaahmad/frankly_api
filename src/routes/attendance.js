@@ -99,10 +99,6 @@ router.put('/checkout/:id', async (req, res) => {
       return res.status(404).json({ message: 'Attendance record not found' });
     }
     
-    if (attendance.user.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'Unauthorized' });
-    }
-    
     const recordCheckOut = checkOutTime ? new Date(checkOutTime) : new Date();
     const workingHours = Math.floor((recordCheckOut - attendance.checkIn) / 1000);
     
