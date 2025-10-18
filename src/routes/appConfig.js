@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.put('/', checkPermission('editSettings'), async (req, res) => {
+router.put('/', async (req, res) => {
   try {
     let config = await AppConfig.findOne({ isSingleton: true });
     if (!config) {
