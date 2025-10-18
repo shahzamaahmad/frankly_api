@@ -229,17 +229,20 @@ router.post('/:id/recalculate', checkPermission('editInventory'), async (req, re
   try {
     const Transaction = require('../models/transaction');
     const Delivery = require('../models/delivery');
+    const User = require('../models/user');
     const item = await Inventory.findById(req.params.id);
     if (!item) return res.status(404).json({ error: 'Item not found' });
 
-    const [txns, deliveries] = await Promise.all([
+    const [txns, deliveries, users] = await Promise.all([
       Transaction.find({ item: req.params.id }),
-      Delivery.find({ 'items.itemName': req.params.id })
+      Delivery.find({ 'items.itemName': req.params.id }),
+      User.find({ 'assets.item': req.params.id })
     ]);
 
     let totalIssued = 0;
     let totalReturned = 0;
     let totalDelivered = 0;
+    let totalAssigned = 0;
 
     txns.forEach(txn => {
       if (txn.type === 'ISSUE') totalIssued += txn.quantity;
@@ -254,7 +257,15 @@ router.post('/:id/recalculate', checkPermission('editInventory'), async (req, re
       });
     });
 
-    const calculatedStock = item.initialStock + totalDelivered - totalIssued + totalReturned;
+    users.forEach(user => {
+      user.assets.forEach(asset => {
+        if (asset.item.toString() === req.params.id) {
+          totalAssigned += asset.quantity || 0;
+        }
+      });
+    });
+
+    const calculatedStock = item.initialStock + totalDelivered - totalIssued + totalReturned - totalAssigned;
     item.currentStock = calculatedStock;
     await item.save();
 
