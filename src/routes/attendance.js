@@ -87,6 +87,7 @@ router.post('/checkin', async (req, res) => {
 
 router.put('/checkout/:id', async (req, res) => {
   try {
+    console.log(`Checkout request: id=${req.params.id}, user=${req.user.username}`);
     const { latitude, longitude, address, checkOutTime } = req.body;
     
     if (!latitude || !longitude || !address) {
@@ -94,6 +95,10 @@ router.put('/checkout/:id', async (req, res) => {
     }
     
     const attendance = await Attendance.findById(req.params.id);
+    console.log(`Attendance found: ${attendance ? 'yes' : 'no'}`);
+    if (attendance) {
+      console.log(`Attendance user: ${attendance.user}, Request user: ${req.user.id}`);
+    }
     
     if (!attendance) {
       return res.status(404).json({ message: 'Attendance record not found' });
