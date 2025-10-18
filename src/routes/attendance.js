@@ -299,4 +299,23 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+router.get('/active-locations', async (req, res) => {
+  try {
+    if (!req.user.permissions?.viewReportAttendance) {
+      return res.status(403).json({ message: 'Permission denied' });
+    }
+    
+    const today = new Date().toISOString().split('T')[0];
+    const activeRecords = await Attendance.find({ date: today, checkOut: null })
+      .populate('user', 'fullName username')
+      .select('user checkIn checkInLocation')
+      .lean();
+    
+    res.json(activeRecords);
+  } catch (error) {
+    console.error('Get active locations error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
 module.exports = router;
