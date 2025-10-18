@@ -78,6 +78,7 @@ router.post('/checkin', async (req, res) => {
     await attendance.save();
     console.log(`/checkin - Saved attendance with date: ${attendance.date}`);
     createLog('CHECKIN', req.user.id, req.user.username, `Checked in at ${address || 'unknown location'}`).catch(e => console.error('Log failed:', e));
+    if (global.io) global.io.emit('attendance:checkin', attendance);
     res.status(201).json(attendance);
   } catch (error) {
     console.error('Check-in error:', error.message, error.stack);
@@ -113,7 +114,7 @@ router.put('/checkout/:id', async (req, res) => {
     await attendance.save();
     
     createLog('CHECKOUT', req.user.id, req.user.username, `Checked out at ${address || 'unknown location'} - ${Math.floor(workingHours / 3600)}h ${Math.floor((workingHours % 3600) / 60)}m`).catch(e => console.error('Log failed:', e));
-    
+    if (global.io) global.io.emit('attendance:checkout', attendance);
     res.json(attendance);
   } catch (error) {
     console.error('Check-out error:', error.message, error.stack);
