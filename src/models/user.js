@@ -48,6 +48,7 @@ const UserSchema = new mongoose.Schema({
     deleteReportAttendance: { type: Boolean, default: false },
     viewNotifications: { type: Boolean, default: false },
     sendNotifications: { type: Boolean, default: false },
+    viewEmployeeTracking: { type: Boolean, default: false },
   },
 
   department: { type: String },
