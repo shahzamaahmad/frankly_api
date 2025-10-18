@@ -112,49 +112,11 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
 // Get all (with optional filters)
 router.get('/', checkPermission('viewInventory'), async (req, res) => {
   try {
-    const Transaction = require('../models/transaction');
-    const User = require('../models/user');
-    
     const filters = {};
     if (req.query.type && typeof req.query.type === 'string') filters.type = req.query.type;
     if (req.query.origin && typeof req.query.origin === 'string') filters.origin = req.query.origin;
-    if (req.query.updatedAfter && typeof req.query.updatedAfter === 'string') {
-      filters.updatedAt = { $gt: new Date(req.query.updatedAfter) };
-    }
     
-    const list = await Inventory.find(filters).lean();
-    const itemIds = list.map(i => i._id);
-    
-    const [txnAgg, userAgg] = await Promise.all([
-      Transaction.aggregate([
-        { $match: { item: { $in: itemIds } } },
-        { $group: {
-          _id: '$item',
-          issued: { $sum: { $cond: [{ $eq: ['$type', 'ISSUE'] }, '$quantity', 0] } },
-          returned: { $sum: { $cond: [{ $eq: ['$type', 'RETURN'] }, '$quantity', 0] } }
-        }}
-      ]),
-      User.aggregate([
-        { $match: { 'assets.item': { $in: itemIds } } },
-        { $unwind: '$assets' },
-        { $match: { 'assets.item': { $in: itemIds } } },
-        { $group: { _id: '$assets.item', total: { $sum: '$assets.quantity' } } }
-      ])
-    ]);
-    
-    const txnMap = {};
-    txnAgg.forEach(t => { txnMap[t._id.toString()] = t; });
-    
-    const assetMap = {};
-    userAgg.forEach(a => { assetMap[a._id.toString()] = a.total || 0; });
-    
-    for (const item of list) {
-      const id = item._id.toString();
-      const txn = txnMap[id] || { issued: 0, returned: 0 };
-      const assigned = assetMap[id] || 0;
-      item.currentStock = (item.initialStock || 0) - txn.issued + txn.returned - assigned;
-    }
-    
+    const list = await Inventory.find(filters);
     res.json(list);
   } catch (err) {
     console.error('Get inventory error:', err);
@@ -165,34 +127,8 @@ router.get('/', checkPermission('viewInventory'), async (req, res) => {
 // Get single
 router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
   try {
-    const Transaction = require('../models/transaction');
-    const User = require('../models/user');
-    
-    const inv = await Inventory.findById(req.params.id).lean();
+    const inv = await Inventory.findById(req.params.id);
     if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
-    
-    const [txnAgg, userAgg] = await Promise.all([
-      Transaction.aggregate([
-        { $match: { item: inv._id } },
-        { $group: {
-          _id: null,
-          issued: { $sum: { $cond: [{ $eq: ['$type', 'ISSUE'] }, '$quantity', 0] } },
-          returned: { $sum: { $cond: [{ $eq: ['$type', 'RETURN'] }, '$quantity', 0] } }
-        }}
-      ]),
-      User.aggregate([
-        { $match: { 'assets.item': inv._id } },
-        { $unwind: '$assets' },
-        { $match: { 'assets.item': inv._id } },
-        { $group: { _id: null, total: { $sum: '$assets.quantity' } } }
-      ])
-    ]);
-    
-    const txn = txnAgg[0] || { issued: 0, returned: 0 };
-    const assigned = userAgg[0]?.total || 0;
-    
-    inv.currentStock = (inv.initialStock || 0) - txn.issued + txn.returned - assigned;
-    
     res.json(inv);
   } catch (err) {
     console.error('Get inventory item error:', err);
