@@ -113,14 +113,30 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
   }
 });
 
-// Get all (with optional filters)
+// Get all (with optional filters and sorting)
 router.get('/', checkPermission('viewInventory'), async (req, res) => {
   try {
     const filters = {};
     if (req.query.type && typeof req.query.type === 'string') filters.type = req.query.type;
     if (req.query.origin && typeof req.query.origin === 'string') filters.origin = req.query.origin;
+    if (req.query.category && typeof req.query.category === 'string') filters.category = req.query.category;
+    if (req.query.search) {
+      filters.$or = [
+        { itemName: { $regex: req.query.search, $options: 'i' } },
+        { sku: { $regex: req.query.search, $options: 'i' } },
+      ];
+    }
     
-    const list = await Inventory.find(filters);
+    let query = Inventory.find(filters);
+    
+    if (req.query.sortBy) {
+      const sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
+      query = query.sort({ [req.query.sortBy]: sortOrder });
+    } else {
+      query = query.sort({ createdAt: -1 });
+    }
+    
+    const list = await query;
     res.json(list);
   } catch (err) {
     console.error('Get inventory error:', err);
