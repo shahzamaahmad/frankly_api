@@ -6,6 +6,8 @@ const { authMiddleware } = require('../middlewares/auth');
 const checkPermission = require('../middlewares/checkPermission');
 const { createLog } = require('../utils/logger');
 
+const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
+
 router.get('/', authMiddleware, checkPermission('viewTransactions'), async (req, res) => {
   try {
     const { site, item } = req.query;
@@ -50,7 +52,7 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
     const inventory = await Inventory.findById(item);
     if (!inventory) return res.status(404).json({ error: 'Item not found' });
 
-    const now = timestamp ? new Date(timestamp) : new Date();
+    const now = timestamp ? new Date(timestamp) : getDubaiTime();
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yyyy = now.getFullYear();

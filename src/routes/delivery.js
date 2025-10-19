@@ -4,6 +4,8 @@ const router = express.Router();
 const Delivery = require('../models/delivery');
 const Inventory = require('../models/inventory');
 const multer = require('multer');
+
+const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
@@ -53,7 +55,7 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
     const Transaction = require('../models/transaction');
     const DeliveryModel = require('../models/delivery');
     
-    const now = new Date();
+    const now = getDubaiTime();
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yyyy = now.getFullYear();

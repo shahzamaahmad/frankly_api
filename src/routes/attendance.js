@@ -40,6 +40,9 @@ const Attendance = require('../models/attendance');
  */
 const { createLog } = require('../utils/logger');
 
+const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
+const getDubaiDate = () => getDubaiTime().toISOString().split('T')[0];
+
 router.post('/checkin', async (req, res) => {
   try {
     const { latitude, longitude, address } = req.body;
@@ -48,9 +51,8 @@ router.post('/checkin', async (req, res) => {
       return res.status(400).json({ message: 'Location data is required' });
     }
     
-    const recordCheckIn = new Date();
-    const dubaiTime = new Date(recordCheckIn.getTime() + (4 * 60 * 60 * 1000));
-    const recordDate = dubaiTime.toISOString().split('T')[0];
+    const recordCheckIn = getDubaiTime();
+    const recordDate = getDubaiDate();
     console.log(`/checkin - Using date: ${recordDate}, checkInTime: ${recordCheckIn}`);
     
     const openAttendance = await Attendance.findOne({
@@ -106,7 +108,7 @@ router.put('/checkout/:id', async (req, res) => {
       return res.status(404).json({ message: 'Attendance record not found' });
     }
     
-    const recordCheckOut = new Date();
+    const recordCheckOut = getDubaiTime();
     const workingHours = Math.floor((recordCheckOut - attendance.checkIn) / 1000);
     
     attendance.checkOut = recordCheckOut;
@@ -149,8 +151,7 @@ router.get('/', async (req, res) => {
 router.get('/today', async (req, res) => {
   try {
     const clientDate = req.query.date;
-    const dubaiTime = new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
-    const date = clientDate || dubaiTime.toISOString().split('T')[0];
+    const date = clientDate || getDubaiDate();
     
     const records = await Attendance.find({ date, user: req.user.id })
       .populate('user', 'fullName username')
@@ -159,7 +160,7 @@ router.get('/today', async (req, res) => {
       .lean();
     
     let totalSeconds = 0;
-    const now = new Date();
+    const now = getDubaiTime();
     for (const record of records) {
       if (record.checkOut) {
         totalSeconds += record.workingHours;
@@ -209,7 +210,7 @@ router.get('/monthly-report', async (req, res) => {
     }
     
     const report = [];
-    const today = new Date();
+    const today = getDubaiTime();
     const maxDate = endDate < today ? endDate : today;
     
     for (let d = new Date(startDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
@@ -343,7 +344,7 @@ router.put('/:id/approve', async (req, res) => {
     
     attendance.approvalStatus = 'approved';
     attendance.approvedBy = req.user.id;
-    attendance.approvedAt = new Date();
+    attendance.approvedAt = getDubaiTime();
     await attendance.save();
     
     createLog('APPROVE_ATTENDANCE', req.user.id, req.user.username, `Approved attendance for ${attendance.user}`).catch(e => console.error('Log failed:', e));
@@ -369,7 +370,7 @@ router.put('/:id/reject', async (req, res) => {
     
     attendance.approvalStatus = 'rejected';
     attendance.approvedBy = req.user.id;
-    attendance.approvedAt = new Date();
+    attendance.approvedAt = getDubaiTime();
     attendance.rejectionReason = reason;
     await attendance.save();
     
