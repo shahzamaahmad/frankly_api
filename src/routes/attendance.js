@@ -198,7 +198,9 @@ router.get('/monthly-report', async (req, res) => {
         $gte: startDate.toISOString().split('T')[0],
         $lte: endDate.toISOString().split('T')[0]
       }
-    }).lean();
+    }).select('user checkIn checkOut workingHours date sessionNumber approvalStatus approvedBy approvedAt rejectionReason _id').lean();
+    
+    console.log(`Monthly report: Found ${records.length} records for user ${userId} in ${year}-${month}`);
     
     const dailyRecords = {};
     for (const record of records) {
@@ -208,6 +210,7 @@ router.get('/monthly-report', async (req, res) => {
       dailyRecords[record.date].sessions.push(record);
       dailyRecords[record.date].totalWorkingHours += record.workingHours || 0;
     }
+    console.log(`Daily records grouped: ${Object.keys(dailyRecords).length} days with attendance`);
     
     const report = [];
     const today = getDubaiTime();
@@ -237,6 +240,7 @@ router.get('/monthly-report', async (req, res) => {
     const presentDays = Object.keys(dailyRecords).length;
     const absentDays = report.length - presentDays;
     
+    console.log(`Report summary: ${report.length} total days, ${presentDays} present, ${absentDays} absent`);
     res.json({ report, totalHours, presentDays, absentDays });
   } catch (error) {
     console.error('Monthly report error:', error.message, error.stack);
