@@ -214,11 +214,10 @@ router.get('/monthly-report', async (req, res) => {
     console.log(`Daily records grouped: ${Object.keys(dailyRecords).length} days with approved attendance`);
     
     const report = [];
-    const today = getDubaiTime();
-    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const maxDate = endDate <= todayDate ? endDate : todayDate;
+    const dubaiNow = getDubaiTime();
     
-    for (let d = new Date(startDate); d <= maxDate; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+    for (let d = new Date(startDate); d <= endDate; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+      if (d > dubaiNow) break;
       const dateStr = d.toISOString().split('T')[0];
       const isSunday = d.getDay() === 0;
       if (dailyRecords[dateStr]) {
