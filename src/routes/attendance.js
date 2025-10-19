@@ -340,7 +340,7 @@ router.put('/:id/approve', async (req, res) => {
       return res.status(403).json({ message: 'Permission denied' });
     }
     
-    const attendance = await Attendance.findById(req.params.id);
+    const attendance = await Attendance.findById(req.params.id).populate('user', 'fullName username');
     if (!attendance) {
       return res.status(404).json({ message: 'Attendance record not found' });
     }
@@ -350,7 +350,7 @@ router.put('/:id/approve', async (req, res) => {
     attendance.approvedAt = getDubaiTime();
     await attendance.save();
     
-    createLog('APPROVE_ATTENDANCE', req.user.id, req.user.username, `Approved attendance for ${attendance.user}`).catch(e => console.error('Log failed:', e));
+    createLog('APPROVE_ATTENDANCE', req.user.id, req.user.username, `Approved attendance for ${attendance.user?.fullName || attendance.user?.username || 'user'}`).catch(e => console.error('Log failed:', e));
     if (global.io) global.io.emit('attendance:approved', attendance);
     res.json(attendance);
   } catch (error) {
@@ -366,7 +366,7 @@ router.put('/:id/reject', async (req, res) => {
     }
     
     const { reason } = req.body;
-    const attendance = await Attendance.findById(req.params.id);
+    const attendance = await Attendance.findById(req.params.id).populate('user', 'fullName username');
     if (!attendance) {
       return res.status(404).json({ message: 'Attendance record not found' });
     }
@@ -377,7 +377,7 @@ router.put('/:id/reject', async (req, res) => {
     attendance.rejectionReason = reason;
     await attendance.save();
     
-    createLog('REJECT_ATTENDANCE', req.user.id, req.user.username, `Rejected attendance for ${attendance.user}`).catch(e => console.error('Log failed:', e));
+    createLog('REJECT_ATTENDANCE', req.user.id, req.user.username, `Rejected attendance for ${attendance.user?.fullName || attendance.user?.username || 'user'}`).catch(e => console.error('Log failed:', e));
     if (global.io) global.io.emit('attendance:rejected', attendance);
     res.json(attendance);
   } catch (error) {

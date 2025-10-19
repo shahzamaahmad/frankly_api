@@ -6,7 +6,7 @@ const { authMiddleware } = require('../middlewares/auth');
 // Get user favorites
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const favorites = await Favorite.find({ user: req.user.userId }).sort({ createdAt: -1 });
+    const favorites = await Favorite.find({ user: req.user._id }).sort({ createdAt: -1 });
     res.json(favorites);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -18,7 +18,7 @@ router.post('/', authMiddleware, async (req, res) => {
   try {
     const { itemType, itemId, itemName } = req.body;
     const favorite = new Favorite({
-      user: req.user.userId,
+      user: req.user._id,
       itemType,
       itemId,
       itemName,
@@ -36,7 +36,7 @@ router.post('/', authMiddleware, async (req, res) => {
 // Remove favorite
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
-    await Favorite.findOneAndDelete({ _id: req.params.id, user: req.user.userId });
+    await Favorite.findOneAndDelete({ _id: req.params.id, user: req.user._id });
     res.json({ message: 'Removed from favorites' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -47,7 +47,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 router.get('/check/:itemType/:itemId', authMiddleware, async (req, res) => {
   try {
     const favorite = await Favorite.findOne({
-      user: req.user.userId,
+      user: req.user._id,
       itemType: req.params.itemType,
       itemId: req.params.itemId,
     });
