@@ -146,8 +146,9 @@ router.post('/checkin', async (req, res) => {
       }
     }
     
-    if (global.io) global.io.emit('attendance:checkin', attendance);
-    res.status(201).json(attendance);
+    const populatedAttendance = await Attendance.findById(attendance._id).populate('user', 'fullName username');
+    if (global.io) global.io.emit('attendance:checkin', populatedAttendance);
+    res.status(201).json(populatedAttendance);
   } catch (error) {
     console.error('Check-in error:', error.message, error.stack);
     res.status(500).json({ message: 'Internal server error', error: error.message });
