@@ -189,8 +189,8 @@ router.get('/monthly-report', async (req, res) => {
       return res.status(400).json({ message: 'userId, year, and month are required' });
     }
     
-    const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-    const endDate = new Date(parseInt(year), parseInt(month), 0);
+    const startDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, 1));
+    const endDate = new Date(Date.UTC(parseInt(year), parseInt(month), 0));
     
     const records = await Attendance.find({
       user: userId,
