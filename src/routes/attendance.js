@@ -66,8 +66,16 @@ router.post('/checkin', async (req, res) => {
       checkOut: null
     });
     
-    if (openAttendance) {
+    if (openAttendance && !userId) {
       return res.status(400).json({ message: 'Please check out first before checking in again' });
+    }
+    
+    if (openAttendance && userId && req.user.permissions?.approveAttendance) {
+      const workingHours = Math.floor((getDubaiTime() - openAttendance.checkIn) / 1000);
+      openAttendance.checkOut = getDubaiTime();
+      openAttendance.checkOutLocation = { latitude, longitude, address };
+      openAttendance.workingHours = workingHours;
+      await openAttendance.save();
     }
     
     const todayRecordsCount = await Attendance.countDocuments({
