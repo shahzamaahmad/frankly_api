@@ -45,10 +45,16 @@ const getDubaiDate = () => getDubaiTime().toISOString().split('T')[0];
 
 router.post('/checkin', async (req, res) => {
   try {
-    const { latitude, longitude, address } = req.body;
+    const { latitude, longitude, address, userId } = req.body;
     
     if (!latitude || !longitude || !address) {
       return res.status(400).json({ message: 'Location data is required' });
+    }
+    
+    const targetUserId = userId || req.user.id;
+    
+    if (userId && userId !== req.user.id && !req.user.permissions?.approveAttendance) {
+      return res.status(403).json({ message: 'Permission denied to check in for other users' });
     }
     
     const recordCheckIn = getDubaiTime();
@@ -56,7 +62,7 @@ router.post('/checkin', async (req, res) => {
     console.log(`/checkin - Using date: ${recordDate}, checkInTime: ${recordCheckIn}`);
     
     const openAttendance = await Attendance.findOne({
-      user: req.user.id,
+      user: targetUserId,
       checkOut: null
     });
     
@@ -65,13 +71,13 @@ router.post('/checkin', async (req, res) => {
     }
     
     const todayRecordsCount = await Attendance.countDocuments({
-      user: req.user.id,
+      user: targetUserId,
       date: recordDate
     });
     const sessionNumber = todayRecordsCount + 1;
     
     const attendance = new Attendance({
-      user: req.user.id,
+      user: targetUserId,
       checkIn: recordCheckIn,
       checkInLocation: { latitude, longitude, address },
       date: recordDate,
@@ -80,7 +86,8 @@ router.post('/checkin', async (req, res) => {
     
     await attendance.save();
     console.log(`/checkin - Saved attendance with date: ${attendance.date}`);
-    createLog('CHECKIN', req.user.id, req.user.username, `Checked in at ${address || 'unknown location'}`).catch(e => console.error('Log failed:', e));
+    const logMsg = userId ? `Checked in ${targetUserId} at ${address || 'unknown location'}` : `Checked in at ${address || 'unknown location'}`;
+    createLog('CHECKIN', req.user.id, req.user.username, logMsg).catch(e => console.error('Log failed:', e));
     if (global.io) global.io.emit('attendance:checkin', attendance);
     res.status(201).json(attendance);
   } catch (error) {
