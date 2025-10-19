@@ -317,10 +317,6 @@ router.get('/active-locations', async (req, res) => {
 
 router.get('/pending', async (req, res) => {
   try {
-    if (!req.user.permissions?.approveAttendance) {
-      return res.status(403).json({ message: 'Permission denied' });
-    }
-    
     const records = await Attendance.find({ approvalStatus: 'pending' })
       .populate('user', 'fullName username')
       .sort({ checkIn: -1 });
