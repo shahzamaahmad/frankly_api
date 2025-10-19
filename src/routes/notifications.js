@@ -18,7 +18,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Create notification
-router.post('/', authenticateToken, authorizePermission('sendAlerts'), upload.single('image'), async (req, res) => {
+router.post('/', authenticateToken, authorizePermission('onesignalSendButton'), upload.single('image'), async (req, res) => {
   try {
     const { title, subtitle, message, linkType, linkId } = req.body;
     let imageUrl = null;
@@ -53,7 +53,7 @@ router.post('/', authenticateToken, authorizePermission('sendAlerts'), upload.si
 });
 
 // Update notification
-router.put('/:id', authenticateToken, authorizePermission('sendAlerts'), upload.single('image'), async (req, res) => {
+router.put('/:id', authenticateToken, authorizePermission('onesignalSendButton'), upload.single('image'), async (req, res) => {
   try {
     const { title, subtitle, message, linkType, linkId } = req.body;
     const notification = await Notification.findById(req.params.id);
@@ -86,7 +86,7 @@ router.put('/:id', authenticateToken, authorizePermission('sendAlerts'), upload.
 });
 
 // Delete notification
-router.delete('/:id', authenticateToken, authorizePermission('sendAlerts'), async (req, res) => {
+router.delete('/:id', authenticateToken, authorizePermission('onesignalSendButton'), async (req, res) => {
   try {
     const notification = await Notification.findByIdAndDelete(req.params.id);
     if (!notification) return res.status(404).json({ message: 'Notification not found' });
@@ -97,7 +97,7 @@ router.delete('/:id', authenticateToken, authorizePermission('sendAlerts'), asyn
 });
 
 // Send notification
-router.post('/:id/send', authenticateToken, authorizePermission('sendAlerts'), async (req, res) => {
+router.post('/:id/send', authenticateToken, authorizePermission('onesignalSendButton'), async (req, res) => {
   try {
     const notification = await Notification.findById(req.params.id);
     if (!notification) return res.status(404).json({ message: 'Notification not found' });
