@@ -89,7 +89,10 @@ router.post('/checkin', async (req, res) => {
       checkIn: recordCheckIn,
       checkInLocation: { latitude, longitude, address },
       date: recordDate,
-      sessionNumber
+      sessionNumber,
+      approvalStatus: userId && req.user.permissions?.approveAttendance ? 'approved' : 'pending',
+      approvedBy: userId && req.user.permissions?.approveAttendance ? req.user.id : null,
+      approvedAt: userId && req.user.permissions?.approveAttendance ? getDubaiTime() : null
     });
     
     await attendance.save();
