@@ -49,7 +49,8 @@ router.post('/checkin', async (req, res) => {
     }
     
     const recordCheckIn = new Date();
-    const recordDate = recordCheckIn.toISOString().split('T')[0];
+    const dubaiTime = new Date(recordCheckIn.getTime() + (4 * 60 * 60 * 1000));
+    const recordDate = dubaiTime.toISOString().split('T')[0];
     console.log(`/checkin - Using date: ${recordDate}, checkInTime: ${recordCheckIn}`);
     
     const openAttendance = await Attendance.findOne({
@@ -148,7 +149,8 @@ router.get('/', async (req, res) => {
 router.get('/today', async (req, res) => {
   try {
     const clientDate = req.query.date;
-    const date = clientDate || new Date().toISOString().split('T')[0];
+    const dubaiTime = new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
+    const date = clientDate || dubaiTime.toISOString().split('T')[0];
     
     const records = await Attendance.find({ date, user: req.user.id })
       .populate('user', 'fullName username')
