@@ -144,6 +144,18 @@ router.get('/', checkPermission('viewInventory'), async (req, res) => {
   }
 });
 
+// Search by barcode
+router.get('/barcode/:barcode', checkPermission('viewInventory'), async (req, res) => {
+  try {
+    const inv = await Inventory.findOne({ barcode: req.params.barcode });
+    if (!inv) return res.status(404).json({ error: 'Item not found' });
+    res.json(inv);
+  } catch (err) {
+    console.error('Barcode search error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get single
 router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
   try {
