@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Activity = require('../models/activity');
-const { authenticateToken } = require('../middlewares/auth');
+const { authMiddleware } = require('../middlewares/auth');
 
 // Get recent activities (last 50)
-router.get('/recent', authenticateToken, async (req, res) => {
+router.get('/recent', authMiddleware, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const activities = await Activity.find()
@@ -18,7 +18,7 @@ router.get('/recent', authenticateToken, async (req, res) => {
 });
 
 // Get user activities
-router.get('/my', authenticateToken, async (req, res) => {
+router.get('/my', authMiddleware, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const activities = await Activity.find({ user: req.user.userId })
@@ -31,7 +31,7 @@ router.get('/my', authenticateToken, async (req, res) => {
 });
 
 // Log activity (internal use)
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   try {
     const { action, itemType, itemId, itemName, details } = req.body;
     const activity = new Activity({

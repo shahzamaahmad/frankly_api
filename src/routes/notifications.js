@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const Notification = require('../models/notification');
-const { authenticateToken, authorizePermission } = require('../middlewares/auth');
+const { authMiddleware } = require('../middlewares/auth');
+const checkPermission = require('../middlewares/checkPermission');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Get all notifications
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const notifications = await Notification.find().populate('createdBy', 'fullName username').sort({ createdAt: -1 });
     res.json(notifications);
@@ -18,7 +19,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Create notification
-router.post('/', authenticateToken, authorizePermission('onesignalSendButton'), upload.single('image'), async (req, res) => {
+router.post('/', authMiddleware, checkPermission('onesignalSendButton'), upload.single('image'), async (req, res) => {
   try {
     const { title, subtitle, message, linkType, linkId } = req.body;
     let imageUrl = null;
@@ -53,7 +54,7 @@ router.post('/', authenticateToken, authorizePermission('onesignalSendButton'), 
 });
 
 // Update notification
-router.put('/:id', authenticateToken, authorizePermission('onesignalSendButton'), upload.single('image'), async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('onesignalSendButton'), upload.single('image'), async (req, res) => {
   try {
     const { title, subtitle, message, linkType, linkId } = req.body;
     const notification = await Notification.findById(req.params.id);
@@ -86,7 +87,7 @@ router.put('/:id', authenticateToken, authorizePermission('onesignalSendButton')
 });
 
 // Delete notification
-router.delete('/:id', authenticateToken, authorizePermission('onesignalSendButton'), async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('onesignalSendButton'), async (req, res) => {
   try {
     const notification = await Notification.findByIdAndDelete(req.params.id);
     if (!notification) return res.status(404).json({ message: 'Notification not found' });
@@ -97,7 +98,7 @@ router.delete('/:id', authenticateToken, authorizePermission('onesignalSendButto
 });
 
 // Send notification
-router.post('/:id/send', authenticateToken, authorizePermission('onesignalSendButton'), async (req, res) => {
+router.post('/:id/send', authMiddleware, checkPermission('onesignalSendButton'), async (req, res) => {
   try {
     const notification = await Notification.findById(req.params.id);
     if (!notification) return res.status(404).json({ message: 'Notification not found' });

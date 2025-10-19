@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Favorite = require('../models/favorite');
-const { authenticateToken } = require('../middlewares/auth');
+const { authMiddleware } = require('../middlewares/auth');
 
 // Get user favorites
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const favorites = await Favorite.find({ user: req.user.userId }).sort({ createdAt: -1 });
     res.json(favorites);
@@ -14,7 +14,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Add favorite
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   try {
     const { itemType, itemId, itemName } = req.body;
     const favorite = new Favorite({
@@ -34,7 +34,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Remove favorite
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
   try {
     await Favorite.findOneAndDelete({ _id: req.params.id, user: req.user.userId });
     res.json({ message: 'Removed from favorites' });
@@ -44,7 +44,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 });
 
 // Check if item is favorite
-router.get('/check/:itemType/:itemId', authenticateToken, async (req, res) => {
+router.get('/check/:itemType/:itemId', authMiddleware, async (req, res) => {
   try {
     const favorite = await Favorite.findOne({
       user: req.user.userId,
