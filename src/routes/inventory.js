@@ -102,7 +102,10 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
     }
     const inv = new Inventory(data);
     await inv.save();
-    if (global.io) global.io.emit('inventory:created', inv);
+    if (global.io) {
+      console.log('📤 Emitting inventory:created');
+      global.io.emit('inventory:created', inv);
+    }
     res.status(201).json(inv);
   } catch (err) {
     console.error('Create inventory error:', err);
@@ -186,7 +189,10 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
     
     const updated = await Inventory.findByIdAndUpdate(req.params.id, updateOps, { new: true });
     if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
-    if (global.io) global.io.emit('inventory:updated', updated);
+    if (global.io) {
+      console.log('📤 Emitting inventory:updated');
+      global.io.emit('inventory:updated', updated);
+    }
     res.json(updated);
   } catch (err) {
     console.error('Update inventory error:', err);
@@ -219,7 +225,10 @@ router.delete('/:id', checkPermission('deleteInventory'), async (req, res) => {
       return res.status(404).json({ error: 'Item not found' });
     }
     await Inventory.findByIdAndDelete(req.params.id);
-    if (global.io) global.io.emit('inventory:deleted', { id: req.params.id });
+    if (global.io) {
+      console.log('📤 Emitting inventory:deleted');
+      global.io.emit('inventory:deleted', { id: req.params.id });
+    }
     res.json({ message: 'Deleted' });
   } catch (err) {
     console.error('Delete inventory error:', err);

@@ -92,7 +92,10 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
       .populate('item', 'name sku');
     
     await createLog('ADD_TRANSACTION', req.user.id, req.user.username, `Added ${type} transaction: ${transactionId}`);
-    if (global.io) global.io.emit('transaction:created', populated);
+    if (global.io) {
+      console.log('📤 Emitting transaction:created');
+      global.io.emit('transaction:created', populated);
+    }
     res.status(201).json(populated);
   } catch (err) {
     console.error('Create transaction error:', err);
@@ -146,7 +149,10 @@ router.put('/:id', authMiddleware, checkPermission('editTransactions'), async (r
       .populate('item', 'name sku');
     
     await createLog('EDIT_TRANSACTION', req.user.id, req.user.username, `Edited transaction: ${transaction.transactionId}`);
-    if (global.io) global.io.emit('transaction:updated', populated);
+    if (global.io) {
+      console.log('📤 Emitting transaction:updated');
+      global.io.emit('transaction:updated', populated);
+    }
     res.json(populated);
   } catch (err) {
     console.error('Update transaction error:', err);
@@ -172,7 +178,10 @@ router.delete('/:id', authMiddleware, checkPermission('deleteTransactions'), asy
     await createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`);
     
     await Transaction.findByIdAndDelete(req.params.id);
-    if (global.io) global.io.emit('transaction:deleted', { id: req.params.id });
+    if (global.io) {
+      console.log('📤 Emitting transaction:deleted');
+      global.io.emit('transaction:deleted', { id: req.params.id });
+    }
     res.json({ message: 'Transaction deleted' });
   } catch (err) {
     console.error('Delete transaction error:', err);
