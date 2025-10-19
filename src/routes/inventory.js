@@ -156,6 +156,18 @@ router.get('/barcode/:barcode', checkPermission('viewInventory'), async (req, re
   }
 });
 
+// Search by SKU
+router.get('/sku/:sku', checkPermission('viewInventory'), async (req, res) => {
+  try {
+    const inv = await Inventory.findOne({ sku: req.params.sku });
+    if (!inv) return res.status(404).json({ error: 'Item not found' });
+    res.json(inv);
+  } catch (err) {
+    console.error('SKU search error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get single
 router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
   try {
