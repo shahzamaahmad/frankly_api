@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Attendance = require('../models/attendance');
+const User = require('../models/user');
+const axios = require('axios');
 
 /**
  * @swagger
@@ -99,6 +101,21 @@ router.post('/checkin', async (req, res) => {
     console.log(`/checkin - Saved attendance with date: ${attendance.date}`);
     const logMsg = userId ? `Checked in ${targetUserId} at ${address || 'unknown location'}` : `Checked in at ${address || 'unknown location'}`;
     createLog('CHECKIN', req.user.id, req.user.username, logMsg).catch(e => console.error('Log failed:', e));
+    
+    if (userId && req.user.permissions?.approveAttendance) {
+      const targetUser = await User.findById(targetUserId);
+      if (targetUser?.oneSignalPlayerId && process.env.ONESIGNAL_APP_ID && process.env.ONESIGNAL_API_KEY) {
+        axios.post('https://onesignal.com/api/v1/notifications', {
+          app_id: process.env.ONESIGNAL_APP_ID,
+          include_player_ids: [targetUser.oneSignalPlayerId],
+          headings: { en: 'Attendance Approved' },
+          contents: { en: `You have been checked in and approved by ${req.user.fullName || req.user.username}` }
+        }, {
+          headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_API_KEY}` }
+        }).catch(e => console.error('OneSignal error:', e.message));
+      }
+    }
+    
     if (global.io) global.io.emit('attendance:checkin', attendance);
     res.status(201).json(attendance);
   } catch (error) {
