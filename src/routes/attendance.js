@@ -216,7 +216,7 @@ router.get('/monthly-report', async (req, res) => {
     const report = [];
     const today = getDubaiTime();
     const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const maxDate = endDate < todayDate ? endDate : todayDate;
+    const maxDate = endDate <= todayDate ? endDate : todayDate;
     
     for (let d = new Date(startDate); d <= maxDate; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
       const dateStr = d.toISOString().split('T')[0];
