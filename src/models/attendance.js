@@ -34,6 +34,21 @@ const attendanceSchema = new mongoose.Schema({
   sessionNumber: {
     type: Number,
     default: 1
+  },
+  approvalStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approvedAt: {
+    type: Date
+  },
+  rejectionReason: {
+    type: String
   }
 }, { timestamps: true });
 

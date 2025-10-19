@@ -315,4 +315,73 @@ router.get('/active-locations', async (req, res) => {
   }
 });
 
+router.get('/pending', async (req, res) => {
+  try {
+    if (!req.user.permissions?.approveAttendance) {
+      return res.status(403).json({ message: 'Permission denied' });
+    }
+    
+    const records = await Attendance.find({ approvalStatus: 'pending' })
+      .populate('user', 'fullName username')
+      .sort({ checkIn: -1 });
+    
+    res.json(records);
+  } catch (error) {
+    console.error('Get pending attendance error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+router.put('/:id/approve', async (req, res) => {
+  try {
+    if (!req.user.permissions?.approveAttendance) {
+      return res.status(403).json({ message: 'Permission denied' });
+    }
+    
+    const attendance = await Attendance.findById(req.params.id);
+    if (!attendance) {
+      return res.status(404).json({ message: 'Attendance record not found' });
+    }
+    
+    attendance.approvalStatus = 'approved';
+    attendance.approvedBy = req.user.id;
+    attendance.approvedAt = new Date();
+    await attendance.save();
+    
+    createLog('APPROVE_ATTENDANCE', req.user.id, req.user.username, `Approved attendance for ${attendance.user}`).catch(e => console.error('Log failed:', e));
+    if (global.io) global.io.emit('attendance:approved', attendance);
+    res.json(attendance);
+  } catch (error) {
+    console.error('Approve attendance error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+router.put('/:id/reject', async (req, res) => {
+  try {
+    if (!req.user.permissions?.approveAttendance) {
+      return res.status(403).json({ message: 'Permission denied' });
+    }
+    
+    const { reason } = req.body;
+    const attendance = await Attendance.findById(req.params.id);
+    if (!attendance) {
+      return res.status(404).json({ message: 'Attendance record not found' });
+    }
+    
+    attendance.approvalStatus = 'rejected';
+    attendance.approvedBy = req.user.id;
+    attendance.approvedAt = new Date();
+    attendance.rejectionReason = reason;
+    await attendance.save();
+    
+    createLog('REJECT_ATTENDANCE', req.user.id, req.user.username, `Rejected attendance for ${attendance.user}`).catch(e => console.error('Log failed:', e));
+    if (global.io) global.io.emit('attendance:rejected', attendance);
+    res.json(attendance);
+  } catch (error) {
+    console.error('Reject attendance error:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
 module.exports = router;

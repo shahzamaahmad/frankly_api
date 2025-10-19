@@ -49,6 +49,7 @@ const UserSchema = new mongoose.Schema({
     viewOnesignalCard: { type: Boolean, default: false },
     onesignalSendButton: { type: Boolean, default: false },
     viewEmployeeTracking: { type: Boolean, default: false },
+    approveAttendance: { type: Boolean, default: false },
   },
 
   department: { type: String },
