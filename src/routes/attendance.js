@@ -78,6 +78,24 @@ router.post('/checkin', async (req, res) => {
       openAttendance.checkOutLocation = { latitude, longitude, address };
       openAttendance.workingHours = workingHours;
       await openAttendance.save();
+      
+      const logMsg = `Checked out ${targetUserId} at ${address || 'unknown location'}`;
+      createLog('CHECKOUT', req.user.id, req.user.username, logMsg).catch(e => console.error('Log failed:', e));
+      
+      const targetUser = await User.findById(targetUserId);
+      if (targetUser?.oneSignalPlayerId && process.env.ONESIGNAL_APP_ID && process.env.ONESIGNAL_API_KEY) {
+        axios.post('https://onesignal.com/api/v1/notifications', {
+          app_id: process.env.ONESIGNAL_APP_ID,
+          include_player_ids: [targetUser.oneSignalPlayerId],
+          headings: { en: 'Checked Out' },
+          contents: { en: `You have been checked out by ${req.user.fullName || req.user.username}` }
+        }, {
+          headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_API_KEY}` }
+        }).catch(e => console.error('OneSignal error:', e.message));
+      }
+      
+      if (global.io) global.io.emit('attendance:checkout', openAttendance);
+      return res.json(openAttendance);
     }
     
     const todayRecordsCount = await Attendance.countDocuments({
@@ -108,7 +126,7 @@ router.post('/checkin', async (req, res) => {
         axios.post('https://onesignal.com/api/v1/notifications', {
           app_id: process.env.ONESIGNAL_APP_ID,
           include_player_ids: [targetUser.oneSignalPlayerId],
-          headings: { en: 'Attendance Approved' },
+          headings: { en: 'Checked In' },
           contents: { en: `You have been checked in and approved by ${req.user.fullName || req.user.username}` }
         }, {
           headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_API_KEY}` }
