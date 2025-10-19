@@ -68,7 +68,8 @@ const UserSchema = new mongoose.Schema({
 
   joiningDate: { type: Date },
   salary: { type: Number },
-  salaryCurrency: { type: String, default: 'AED' }
+  salaryCurrency: { type: String, default: 'AED' },
+  oneSignalPlayerId: { type: String }
 }, { timestamps: true });
 
 UserSchema.pre('save', async function (next) {
