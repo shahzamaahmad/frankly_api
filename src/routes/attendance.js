@@ -82,7 +82,7 @@ router.post('/checkin', async (req, res) => {
       const logMsg = `Checked out ${targetUserId} at ${address || 'unknown location'}`;
       createLog('CHECKOUT', req.user.id, req.user.username, logMsg).catch(e => console.error('Log failed:', e));
       
-      if (process.env.ONESIGNAL_APP_ID && process.env.ONESIGNAL_API_KEY) {
+      if (process.env.ONESIGNAL_APP_ID && process.env.ONESIGNAL_REST_API_KEY) {
         console.log('Sending OneSignal checkout notification to user:', targetUserId);
         axios.post('https://onesignal.com/api/v1/notifications', {
           app_id: process.env.ONESIGNAL_APP_ID,
@@ -90,7 +90,7 @@ router.post('/checkin', async (req, res) => {
           headings: { en: 'Checked Out' },
           contents: { en: `You have been checked out by ${req.user.fullName || req.user.username}` }
         }, {
-          headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_API_KEY}` }
+          headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}` }
         }).then(response => {
           console.log('OneSignal checkout notification sent:', response.data);
         }).catch(e => {
@@ -98,7 +98,6 @@ router.post('/checkin', async (req, res) => {
         });
       } else {
         console.log('OneSignal not configured for checkout');
-      }
       }
       
       if (global.io) global.io.emit('attendance:checkout', openAttendance);
@@ -128,7 +127,7 @@ router.post('/checkin', async (req, res) => {
     createLog('CHECKIN', req.user.id, req.user.username, logMsg).catch(e => console.error('Log failed:', e));
     
     if (userId && req.user.permissions?.approveAttendance) {
-      if (process.env.ONESIGNAL_APP_ID && process.env.ONESIGNAL_API_KEY) {
+      if (process.env.ONESIGNAL_APP_ID && process.env.ONESIGNAL_REST_API_KEY) {
         console.log('Sending OneSignal notification to user:', targetUserId);
         axios.post('https://onesignal.com/api/v1/notifications', {
           app_id: process.env.ONESIGNAL_APP_ID,
@@ -136,14 +135,14 @@ router.post('/checkin', async (req, res) => {
           headings: { en: 'Checked In' },
           contents: { en: `You have been checked in and approved by ${req.user.fullName || req.user.username}` }
         }, {
-          headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_API_KEY}` }
+          headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}` }
         }).then(response => {
           console.log('OneSignal notification sent successfully:', response.data);
         }).catch(e => {
           console.error('OneSignal error:', e.response?.data || e.message);
         });
       } else {
-        console.log('OneSignal not configured - missing APP_ID or API_KEY');
+        console.log('OneSignal not configured - missing APP_ID or REST_API_KEY');
       }
     }
     

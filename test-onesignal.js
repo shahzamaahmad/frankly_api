@@ -8,8 +8,8 @@ if (!testUserId) {
   process.exit(1);
 }
 
-if (!process.env.ONESIGNAL_APP_ID || !process.env.ONESIGNAL_API_KEY) {
-  console.error('ERROR: ONESIGNAL_APP_ID or ONESIGNAL_API_KEY not set in .env');
+if (!process.env.ONESIGNAL_APP_ID || !process.env.ONESIGNAL_REST_API_KEY) {
+  console.error('ERROR: ONESIGNAL_APP_ID or ONESIGNAL_REST_API_KEY not set in .env');
   process.exit(1);
 }
 
@@ -23,7 +23,7 @@ axios.post('https://onesignal.com/api/v1/notifications', {
   headings: { en: 'Test Notification' },
   contents: { en: 'This is a test notification from the backend' }
 }, {
-  headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_API_KEY}` }
+  headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}` }
 }).then(response => {
   console.log('SUCCESS! Notification sent:', response.data);
 }).catch(error => {
