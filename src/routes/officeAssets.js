@@ -147,7 +147,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-router.get('/:id/transactions', async (req, res) => {
+router.get('/:id/transactions', authMiddleware, async (req, res) => {
   try {
     const AssetTransaction = require('../models/assetTransaction');
     const transactions = await AssetTransaction.find({ asset: req.params.id })

@@ -201,7 +201,7 @@ router.post('/:id/assign-office-asset', checkPermission('editEmployees'), async 
     await officeAsset.save();
 
     const now = new Date();
-    const dateStr = `${now.getDate().toString().padStart(2, '0')}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getFullYear()}`;
+    const dateStr = `${now.getDate().toString().padStart(2, '0')}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getFullYear().toString().slice(-2)}`;
     const todayTransactions = await AssetTransaction.countDocuments({
       createdAt: {
         $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
