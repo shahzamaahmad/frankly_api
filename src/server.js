@@ -120,7 +120,6 @@ mongoose.connect(process.env.MONGODB_URI, {
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
 }).then(() => {
-  console.log('MongoDB connected');
   const http = require('http');
   const socketIo = require('socket.io');
   const server = http.createServer(app);
@@ -133,33 +132,26 @@ mongoose.connect(process.env.MONGODB_URI, {
   io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) {
-      console.log('Socket auth failed: no token');
       return next(new Error('Authentication error'));
     }
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       socket.userId = decoded.id;
-      console.log('Socket authenticated for user:', decoded.id);
       next();
     } catch (err) {
-      console.log('Socket auth failed:', err.message);
       next(new Error('Authentication error'));
     }
   });
 
   io.on('connection', (socket) => {
-    console.log('✅ User connected:', socket.id, 'userId:', socket.userId);
     socket.join(`user:${socket.userId}`);
-    console.log('User joined room: user:' + socket.userId);
 
     socket.on('disconnect', () => {
-      console.log('❌ User disconnected:', socket.id);
     });
   });
 
   global.io = io;
 
-  server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
   server.on('error', (err) => {
     console.error('Server error:', err);
@@ -182,9 +174,7 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, closing server gracefully');
   mongoose.connection.close(false, () => {
-    console.log('MongoDB connection closed');
     process.exit(0);
   });
 });

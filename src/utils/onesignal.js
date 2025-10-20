@@ -41,8 +41,6 @@ const sendAlert = async (options) => {
     if (ttl) payload.ttl = ttl;
     if (sendAfter) payload.send_after = sendAfter;
 
-    console.log('Sending OneSignal alert with payload:', JSON.stringify(payload, null, 2));
-    console.log('Using API Key (first 20 chars):', process.env.ONESIGNAL_REST_API_KEY.substring(0, 20));
 
     const response = await axios.post(
       'https://onesignal.com/api/v1/notifications',
@@ -55,7 +53,6 @@ const sendAlert = async (options) => {
       }
     );
 
-    console.log('OneSignal response:', response.data);
     return response.data;
   } catch (error) {
     console.error('OneSignal error:', error.response?.data || error.message);

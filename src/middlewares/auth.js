@@ -12,7 +12,6 @@ const authMiddleware = async (req, res, next) => {
     const user = await User.findById(decoded.id).select('-password');
     if (!user) return res.status(401).json({ message: 'Please login and try again' });
     if (!user.isActive) {
-      console.log(`Auth middleware: User ${user.username} is inactive`);
       return res.status(403).json({ message: 'Account is deactivated' });
     }
     req.user = user;

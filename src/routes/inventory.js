@@ -50,6 +50,7 @@ const Inventory = require('../models/inventory');
  *         description: Item created
  */
 const multer = require('multer');
+const { createLog } = require('../utils/logger');
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
@@ -102,8 +103,8 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
     }
     const inv = new Inventory(data);
     await inv.save();
+    createLog('ADD_INVENTORY', req.user.id, req.user.username, `Added item: ${inv.itemName}`).catch(e => console.error('Log failed:', e));
     if (global.io) {
-      console.log('📤 Emitting inventory:created');
       global.io.emit('inventory:created', inv);
     }
     res.status(201).json(inv);
@@ -189,8 +190,6 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
 }, async (req, res) => {
   try {
     const data = req.body;
-    console.log('Update inventory - has file:', !!req.file);
-    console.log('Update inventory - body keys:', Object.keys(data));
     
     // Parse numeric fields from strings
     if (data.initialStock) data.initialStock = Number(data.initialStock);
@@ -204,9 +203,7 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
     
     try {
       if (req.file) {
-        console.log('Uploading file to Cloudinary...');
         const imageUrl = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'image');
-        console.log('Cloudinary URL:', imageUrl);
         data.imageUrl = imageUrl;
       } else if (typeof data.imageUrl === 'string' && data.imageUrl === '') {
         data.imageUrl = '';
@@ -229,8 +226,8 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
     
     const updated = await Inventory.findByIdAndUpdate(req.params.id, updateOps, { new: true });
     if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
+    createLog('EDIT_INVENTORY', req.user.id, req.user.username, `Updated item: ${updated.itemName}`).catch(e => console.error('Log failed:', e));
     if (global.io) {
-      console.log('📤 Emitting inventory:updated');
       global.io.emit('inventory:updated', updated);
     }
     res.json(updated);
@@ -265,8 +262,8 @@ router.delete('/:id', checkPermission('deleteInventory'), async (req, res) => {
       return res.status(404).json({ error: 'Item not found' });
     }
     await Inventory.findByIdAndDelete(req.params.id);
+    createLog('DELETE_INVENTORY', req.user.id, req.user.username, `Deleted item: ${item.itemName}`).catch(e => console.error('Log failed:', e));
     if (global.io) {
-      console.log('📤 Emitting inventory:deleted');
       global.io.emit('inventory:deleted', { id: req.params.id });
     }
     res.json({ message: 'Deleted' });

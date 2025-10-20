@@ -6,7 +6,8 @@ const { authMiddleware } = require('../middlewares/auth');
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 500;
-    const logs = await Log.find().sort({ timestamp: -1 }).limit(limit).lean();
+    const query = req.user.role === 'admin' ? {} : { userId: req.user.id };
+    const logs = await Log.find(query).sort({ timestamp: -1 }).limit(limit).lean();
     res.json(logs);
   } catch (err) {
     console.error('Fetch logs error:', err);

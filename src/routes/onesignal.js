@@ -12,7 +12,6 @@ router.post('/send', authMiddleware, checkPermission('onesignalSendButton'), asy
       return res.status(400).json({ error: 'Title and message are required' });
     }
 
-    console.log('Alert request:', { title, message, userIds });
 
     const result = await sendAlert({
       title,

@@ -61,7 +61,6 @@ router.post('/checkin', async (req, res) => {
     
     const recordCheckIn = getDubaiTime();
     const recordDate = getDubaiDate();
-    console.log(`/checkin - Using date: ${recordDate}, checkInTime: ${recordCheckIn}`);
     
     const openAttendance = await Attendance.findOne({
       user: targetUserId,
@@ -83,7 +82,6 @@ router.post('/checkin', async (req, res) => {
       createLog('CHECKOUT', req.user.id, req.user.username, logMsg).catch(e => console.error('Log failed:', e));
       
       if (process.env.ONESIGNAL_APP_ID && process.env.ONESIGNAL_REST_API_KEY) {
-        console.log('Sending OneSignal checkout notification to user:', targetUserId);
         axios.post('https://onesignal.com/api/v1/notifications', {
           app_id: process.env.ONESIGNAL_APP_ID,
           include_external_user_ids: [targetUserId],
@@ -92,12 +90,10 @@ router.post('/checkin', async (req, res) => {
         }, {
           headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}` }
         }).then(response => {
-          console.log('OneSignal checkout notification sent:', response.data);
         }).catch(e => {
           console.error('OneSignal checkout error:', e.response?.data || e.message);
         });
       } else {
-        console.log('OneSignal not configured for checkout');
       }
       
       if (global.io) global.io.emit('attendance:checkout', openAttendance);
@@ -122,13 +118,11 @@ router.post('/checkin', async (req, res) => {
     });
     
     await attendance.save();
-    console.log(`/checkin - Saved attendance with date: ${attendance.date}`);
     const logMsg = userId ? `Checked in ${targetUserId} at ${address || 'unknown location'}` : `Checked in at ${address || 'unknown location'}`;
     createLog('CHECKIN', req.user.id, req.user.username, logMsg).catch(e => console.error('Log failed:', e));
     
     if (userId && req.user.permissions?.approveAttendance) {
       if (process.env.ONESIGNAL_APP_ID && process.env.ONESIGNAL_REST_API_KEY) {
-        console.log('Sending OneSignal notification to user:', targetUserId);
         axios.post('https://onesignal.com/api/v1/notifications', {
           app_id: process.env.ONESIGNAL_APP_ID,
           include_external_user_ids: [targetUserId],
@@ -137,12 +131,10 @@ router.post('/checkin', async (req, res) => {
         }, {
           headers: { 'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}` }
         }).then(response => {
-          console.log('OneSignal notification sent successfully:', response.data);
         }).catch(e => {
           console.error('OneSignal error:', e.response?.data || e.message);
         });
       } else {
-        console.log('OneSignal not configured - missing APP_ID or REST_API_KEY');
       }
     }
     
@@ -157,7 +149,6 @@ router.post('/checkin', async (req, res) => {
 
 router.put('/checkout/:id', async (req, res) => {
   try {
-    console.log(`Checkout request: id=${req.params.id}, user=${req.user.username}`);
     const { latitude, longitude, address, checkOutTime } = req.body;
     
     if (!latitude || !longitude || !address) {
@@ -165,9 +156,7 @@ router.put('/checkout/:id', async (req, res) => {
     }
     
     const attendance = await Attendance.findById(req.params.id);
-    console.log(`Attendance found: ${attendance ? 'yes' : 'no'}`);
     if (attendance) {
-      console.log(`Attendance user: ${attendance.user}, Request user: ${req.user.id}`);
     }
     
     if (!attendance) {
@@ -267,7 +256,6 @@ router.get('/monthly-report', async (req, res) => {
       approvalStatus: 'approved'
     }).select('user checkIn checkOut workingHours date sessionNumber approvalStatus approvedBy approvedAt rejectionReason _id').lean();
     
-    console.log(`Monthly report: Found ${records.length} approved records for user ${userId} in ${year}-${month}`);
     
     const dailyRecords = {};
     for (const record of records) {
@@ -277,7 +265,6 @@ router.get('/monthly-report', async (req, res) => {
       dailyRecords[record.date].sessions.push(record);
       dailyRecords[record.date].totalWorkingHours += record.workingHours || 0;
     }
-    console.log(`Daily records grouped: ${Object.keys(dailyRecords).length} days with approved attendance`);
     
     const report = [];
     
@@ -305,7 +292,6 @@ router.get('/monthly-report', async (req, res) => {
     const presentDays = Object.keys(dailyRecords).length;
     const absentDays = report.length - presentDays;
     
-    console.log(`Report summary: ${report.length} total days, ${presentDays} approved present, ${absentDays} absent`);
     res.json({ report, totalHours, presentDays, absentDays });
   } catch (error) {
     console.error('Monthly report error:', error.message, error.stack);
@@ -375,9 +361,7 @@ router.get('/active-locations', async (req, res) => {
     })
       .populate('user', 'fullName username')
       .lean();
-    console.log('Active employees query result:', allRecords.length);
     allRecords.forEach(r => {
-      console.log(`- ${r.user?.fullName}: checkIn=${r.checkIn}, checkOut=${r.checkOut}`);
     });
     
     res.json(allRecords);

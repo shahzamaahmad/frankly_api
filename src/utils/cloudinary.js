@@ -13,7 +13,6 @@ async function uploadBufferToCloudinary(buffer, filename) {
       return reject(new Error('Invalid buffer'));
     }
     
-    console.log('Uploading to Cloudinary:', filename);
     const opts = { resource_type: 'auto', folder: 'inventory' };
     if (filename) {
       const sanitized = filename.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/\.[^/.]+$/, '');
@@ -24,7 +23,6 @@ async function uploadBufferToCloudinary(buffer, filename) {
         console.error('Cloudinary upload error:', error);
         return reject(error);
       }
-      console.log('Cloudinary upload success:', result.secure_url);
       resolve(result.secure_url || result.url);
     });
     streamifier.createReadStream(buffer).pipe(uploadStream);
