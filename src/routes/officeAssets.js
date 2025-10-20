@@ -147,4 +147,19 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   }
 });
 
+router.get('/:id/transactions', async (req, res) => {
+  try {
+    const AssetTransaction = require('../models/assetTransaction');
+    const transactions = await AssetTransaction.find({ asset: req.params.id })
+      .populate('employee', 'fullName')
+      .populate('assignedBy', 'fullName')
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json(transactions);
+  } catch (err) {
+    console.error('Get asset transactions error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 module.exports = router;
