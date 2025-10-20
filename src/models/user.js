@@ -38,7 +38,7 @@ const UserSchema = new mongoose.Schema({
     addEmployees: { type: Boolean, default: false },
     editEmployees: { type: Boolean, default: false },
     deleteEmployees: { type: Boolean, default: false },
-    viewSites: { type: Boolean, default: true },
+    viewSites: { type: Boolean, default: false },
     addSites: { type: Boolean, default: false },
     editSites: { type: Boolean, default: false },
     deleteSites: { type: Boolean, default: false },
