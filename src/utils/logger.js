@@ -4,7 +4,7 @@ async function createLog(action, userId, username, details = '') {
   try {
     await Log.create({ action, userId, username, details });
   } catch (err) {
-    console.error('Log error:', err);
+    console.error('Failed to create log:', err);
   }
 }
 
