@@ -49,15 +49,15 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
 
     if (req.file) {
       try {
-        const result = await cloudinary.uploader.upload_stream(
-          { resource_type: 'image', folder: 'office_assets' },
-          (error, result) => {
-            if (error) throw error;
-            return result;
-          }
-        );
-        
-        result.end(req.file.buffer);
+        const result = await new Promise((resolve, reject) => {
+          cloudinary.uploader.upload_stream(
+            { resource_type: 'image', folder: 'office_assets' },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          ).end(req.file.buffer);
+        });
         assetData.imageUrl = result.secure_url;
       } catch (uploadError) {
         assetData.imageData = req.file.buffer;
@@ -91,15 +91,15 @@ router.put('/:id', authMiddleware, upload.single('image'), async (req, res) => {
 
     if (req.file) {
       try {
-        const result = await cloudinary.uploader.upload_stream(
-          { resource_type: 'image', folder: 'office_assets' },
-          (error, result) => {
-            if (error) throw error;
-            return result;
-          }
-        );
-        
-        result.end(req.file.buffer);
+        const result = await new Promise((resolve, reject) => {
+          cloudinary.uploader.upload_stream(
+            { resource_type: 'image', folder: 'office_assets' },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          ).end(req.file.buffer);
+        });
         updateData.imageUrl = result.secure_url;
         updateData.imageData = undefined;
       } catch (uploadError) {
