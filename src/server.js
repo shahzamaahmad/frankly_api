@@ -181,6 +181,19 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('SIGTERM', async () => {
-  await mongoose.connection.close();
+  try {
+    await mongoose.connection.close();
+  } catch (err) {
+    console.error('Error closing MongoDB connection:', err);
+  }
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  try {
+    await mongoose.connection.close();
+  } catch (err) {
+    console.error('Error closing MongoDB connection:', err);
+  }
   process.exit(0);
 });

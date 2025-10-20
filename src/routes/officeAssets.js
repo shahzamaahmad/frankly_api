@@ -48,19 +48,10 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
     const assetData = { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
 
     if (req.file) {
-      console.log('File received:', req.file.originalname, req.file.size);
       try {
-        const result = await new Promise((resolve, reject) => {
-          cloudinary.uploader.upload_stream(
-            { resource_type: 'image', folder: 'office_assets' },
-            (error, result) => {
-              if (error) reject(error);
-              else resolve(result);
-            }
-          ).end(req.file.buffer);
-        });
-        console.log('Cloudinary upload success:', result.secure_url);
-        assetData.imageUrl = result.secure_url;
+        const { uploadBufferToCloudinary } = require('../utils/cloudinary');
+        const imageUrl = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname);
+        assetData.imageUrl = imageUrl;
       } catch (uploadError) {
         console.error('Cloudinary upload failed:', uploadError);
         assetData.imageData = req.file.buffer;
@@ -95,18 +86,12 @@ router.put('/:id', authMiddleware, upload.single('image'), async (req, res) => {
 
     if (req.file) {
       try {
-        const result = await new Promise((resolve, reject) => {
-          cloudinary.uploader.upload_stream(
-            { resource_type: 'image', folder: 'office_assets' },
-            (error, result) => {
-              if (error) reject(error);
-              else resolve(result);
-            }
-          ).end(req.file.buffer);
-        });
-        updateData.imageUrl = result.secure_url;
+        const { uploadBufferToCloudinary } = require('../utils/cloudinary');
+        const imageUrl = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname);
+        updateData.imageUrl = imageUrl;
         updateData.imageData = undefined;
       } catch (uploadError) {
+        console.error('Cloudinary upload failed:', uploadError);
         updateData.imageData = req.file.buffer;
         updateData.imageUrl = undefined;
       }
