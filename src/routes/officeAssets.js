@@ -38,13 +38,13 @@ router.get('/:id', authMiddleware, async (req, res) => {
 // POST create office asset
 router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
   try {
-    const { sku, name, category, subCategory, brand, model, serialNumber, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description } = req.body;
+    const { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description } = req.body;
 
     if (!sku || !name || !category) {
       return res.status(400).json({ message: 'SKU, name, and category are required' });
     }
 
-    const assetData = { sku, name, category, subCategory, brand, model, serialNumber, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
+    const assetData = { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
 
     if (req.file) {
       try {
@@ -79,9 +79,9 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
 // PUT update office asset
 router.put('/:id', authMiddleware, upload.single('image'), async (req, res) => {
   try {
-    const { sku, name, category, subCategory, brand, model, serialNumber, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description } = req.body;
+    const { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description } = req.body;
 
-    const updateData = { sku, name, category, subCategory, brand, model, serialNumber, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
+    const updateData = { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
 
     if (req.file) {
       try {

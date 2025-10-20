@@ -9,6 +9,7 @@ const officeAssetSchema = new mongoose.Schema({
   model: { type: String },
   serialNumber: { type: String },
   purchaseDate: { type: Date },
+  quantity: { type: Number, default: 1 },
   purchasePrice: { type: Number },
   currentValue: { type: Number },
   condition: { type: String, enum: ['New', 'Good', 'Fair', 'Poor'], default: 'Good' },
