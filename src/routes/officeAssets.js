@@ -39,13 +39,21 @@ router.get('/:id', authMiddleware, async (req, res) => {
 // POST create office asset
 router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
   try {
-    const { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description } = req.body;
+    const { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description, transactionType } = req.body;
 
     if (!sku || !name || !category) {
       return res.status(400).json({ message: 'SKU, name, and category are required' });
     }
 
-    const assetData = { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
+    const assetData = { sku, name, category, subCategory, brand, model, serialNumber, quantity: parseInt(quantity) || 1, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
+
+    // Handle initial transaction if assignedTo is provided
+    if (assignedTo && transactionType) {
+      const transactionQuantity = parseInt(quantity) || 1;
+      if (transactionType === 'ASSIGN') {
+        assetData.quantity = Math.max(0, assetData.quantity - transactionQuantity);
+      }
+    }
 
     if (req.file) {
       try {
@@ -97,22 +105,33 @@ router.put('/:id', authMiddleware, upload.single('image'), async (req, res) => {
       }
     }
 
-    // Check if assignedTo changed and create transaction
-    if (assignedTo && assignedTo !== currentAsset.assignedTo?.toString()) {
-      const transactionId = `AST${Date.now()}`;
-      const transaction = new AssetTransaction({
-        transactionId,
-        type: 'ASSIGN',
-        asset: req.params.id,
-        employee: assignedTo,
-        assignedBy: req.user._id,
-        quantity: quantity || currentAsset.quantity,
-        assignDate: new Date(),
-        condition: condition || currentAsset.condition,
-        status: 'ACTIVE'
-      });
-      await transaction.save();
+    // Handle quantity changes based on transaction type
+    const transactionType = req.body.transactionType || 'ASSIGN';
+    const transactionQuantity = parseInt(quantity) || 1;
+    
+    if (transactionType === 'ASSIGN') {
+      // Decrease quantity when assigning
+      updateData.quantity = Math.max(0, currentAsset.quantity - transactionQuantity);
+    } else if (transactionType === 'RETURN') {
+      // Increase quantity when returning
+      updateData.quantity = currentAsset.quantity + transactionQuantity;
     }
+
+    // Create transaction record
+    const transactionId = `AST${Date.now()}`;
+    const transaction = new AssetTransaction({
+      transactionId,
+      type: transactionType,
+      asset: req.params.id,
+      employee: assignedTo || currentAsset.assignedTo,
+      assignedBy: req.user._id,
+      quantity: transactionQuantity,
+      assignDate: transactionType === 'ASSIGN' ? new Date() : undefined,
+      returnDate: transactionType === 'RETURN' ? new Date() : undefined,
+      condition: condition || currentAsset.condition,
+      status: transactionType === 'ASSIGN' ? 'ACTIVE' : 'RETURNED'
+    });
+    await transaction.save();
 
     const asset = await OfficeAsset.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json(asset);
