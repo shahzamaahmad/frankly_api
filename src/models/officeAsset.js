@@ -8,6 +8,7 @@ const officeAssetSchema = new mongoose.Schema({
   brand: { type: String },
   model: { type: String },
   serialNumber: { type: String },
+  barcode: { type: String },
   purchaseDate: { type: Date },
   quantity: { type: Number, default: 1 },
   purchasePrice: { type: Number },
@@ -40,5 +41,6 @@ officeAssetSchema.index({ category: 1 });
 officeAssetSchema.index({ status: 1 });
 officeAssetSchema.index({ assignedTo: 1 });
 officeAssetSchema.index({ condition: 1 });
+officeAssetSchema.index({ barcode: 1 });
 
 module.exports = mongoose.model('OfficeAsset', officeAssetSchema);

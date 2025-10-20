@@ -138,19 +138,22 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
     }
     
     const transactionId = `${datePrefix}-${String(sequenceNumber).padStart(3, '0')}`;
-    const transaction = new AssetTransaction({
-      transactionId,
-      type: transactionType,
-      asset: req.params.id,
-      employee: assignedTo || currentAsset.assignedTo,
-      assignedBy: req.user._id,
-      quantity: transactionQuantity,
-      assignDate: transactionType === 'ASSIGN' ? new Date() : undefined,
-      returnDate: transactionType === 'RETURN' ? new Date() : undefined,
-      condition: condition || currentAsset.condition,
-      status: transactionType === 'ASSIGN' ? 'ACTIVE' : 'RETURNED'
-    });
-    await transaction.save();
+    // Only create transaction if employee is provided
+    if (assignedTo || currentAsset.assignedTo) {
+      const transaction = new AssetTransaction({
+        transactionId,
+        type: transactionType,
+        asset: req.params.id,
+        employee: assignedTo || currentAsset.assignedTo,
+        assignedBy: req.user._id,
+        quantity: transactionQuantity,
+        assignDate: transactionType === 'ASSIGN' ? new Date() : undefined,
+        returnDate: transactionType === 'RETURN' ? new Date() : undefined,
+        condition: condition || currentAsset.condition,
+        status: transactionType === 'ASSIGN' ? 'ACTIVE' : 'RETURNED'
+      });
+      await transaction.save();
+    }
 
     const asset = await OfficeAsset.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json(asset);
