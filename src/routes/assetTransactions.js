@@ -35,6 +35,33 @@ router.get('/employee/:employeeId', authMiddleware, async (req, res) => {
   }
 });
 
+// PUT update asset transaction (admin only)
+router.put('/:id', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+
+    const transaction = await AssetTransaction.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    
+    if (!transaction) {
+      return res.status(404).json({ message: 'Asset transaction not found' });
+    }
+
+    const io = req.app.get('io');
+    if (io) io.emit('assetTransaction:updated', transaction);
+
+    res.json(transaction);
+  } catch (err) {
+    console.error('Error updating asset transaction:', err);
+    res.status(500).json({ message: 'Failed to update asset transaction' });
+  }
+});
+
 // PUT return asset
 router.put('/:id/return', authMiddleware, async (req, res) => {
   try {
@@ -78,6 +105,9 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     if (!transaction) {
       return res.status(404).json({ message: 'Asset transaction not found' });
     }
+
+    const io = req.app.get('io');
+    if (io) io.emit('assetTransaction:deleted', { id: req.params.id });
 
     res.json({ message: 'Asset transaction deleted successfully' });
   } catch (err) {

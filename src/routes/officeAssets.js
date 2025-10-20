@@ -156,6 +156,10 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
     }
 
     const asset = await OfficeAsset.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    
+    const io = req.app.get('io');
+    if (io) io.emit('officeAsset:updated', asset);
+    
     res.json(asset);
   } catch (err) {
     console.error('Error updating office asset:', err);
