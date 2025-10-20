@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const OfficeAsset = require('../models/officeAsset');
-const auth = require('../middlewares/auth');
+const { authMiddleware } = require('../middlewares/auth');
 const cloudinary = require('../utils/cloudinary');
 
 const router = express.Router();
@@ -11,7 +11,7 @@ const upload = multer({
 });
 
 // GET all office assets
-router.get('/', auth, async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const assets = await OfficeAsset.find().populate('assignedTo', 'fullName').lean();
     res.json(assets);
@@ -22,7 +22,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // GET office asset by ID
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const asset = await OfficeAsset.findById(req.params.id).populate('assignedTo', 'fullName');
     if (!asset) {
@@ -36,7 +36,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // POST create office asset
-router.post('/', auth, upload.single('image'), async (req, res) => {
+router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
   try {
     const { sku, name, category, subCategory, brand, model, serialNumber, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description } = req.body;
 
@@ -77,7 +77,7 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
 });
 
 // PUT update office asset
-router.put('/:id', auth, upload.single('image'), async (req, res) => {
+router.put('/:id', authMiddleware, upload.single('image'), async (req, res) => {
   try {
     const { sku, name, category, subCategory, brand, model, serialNumber, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description } = req.body;
 
@@ -114,7 +114,7 @@ router.put('/:id', auth, upload.single('image'), async (req, res) => {
 });
 
 // DELETE office asset
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
   try {
     const asset = await OfficeAsset.findByIdAndDelete(req.params.id);
     if (!asset) {
