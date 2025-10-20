@@ -3,7 +3,6 @@ const router = express.Router();
 const StockTransfer = require('../models/stockTransfer');
 const Inventory = require('../models/inventory');
 const Transaction = require('../models/transaction');
-const Activity = require('../models/activity');
 const { authenticate } = require('../middlewares/auth');
 
 router.post('/', authenticate, async (req, res) => {
@@ -25,7 +24,6 @@ router.post('/', authenticate, async (req, res) => {
       status: 'PENDING'
     });
     await transfer.save();
-    await Activity.create({ user: req.user.userId, action: 'ADD', entity: 'StockTransfer', entityId: transfer._id, details: `Created transfer ${transferId}` });
     global.io?.emit('stockTransfer:created', transfer);
     res.status(201).json(transfer);
   } catch (error) {
@@ -92,7 +90,6 @@ router.put('/:id/approve', authenticate, async (req, res) => {
     transfer.transferDate = new Date();
     await transfer.save();
     
-    await Activity.create({ user: req.user.userId, action: 'EDIT', entity: 'StockTransfer', entityId: transfer._id, details: `Approved transfer ${transfer.transferId}` });
     global.io?.emit('stockTransfer:updated', transfer);
     res.json(transfer);
   } catch (error) {
@@ -124,7 +121,6 @@ router.put('/:id/receive', authenticate, async (req, res) => {
     transfer.receiveDate = new Date();
     await transfer.save();
     
-    await Activity.create({ user: req.user.userId, action: 'EDIT', entity: 'StockTransfer', entityId: transfer._id, details: `Received transfer ${transfer.transferId}` });
     global.io?.emit('stockTransfer:updated', transfer);
     res.json(transfer);
   } catch (error) {
@@ -142,7 +138,6 @@ router.put('/:id/cancel', authenticate, async (req, res) => {
     transfer.status = 'CANCELLED';
     await transfer.save();
     
-    await Activity.create({ user: req.user.userId, action: 'EDIT', entity: 'StockTransfer', entityId: transfer._id, details: `Cancelled transfer ${transfer.transferId}` });
     global.io?.emit('stockTransfer:updated', transfer);
     res.json(transfer);
   } catch (error) {
@@ -155,7 +150,6 @@ router.delete('/:id', authenticate, async (req, res) => {
   try {
     const transfer = await StockTransfer.findByIdAndDelete(req.params.id);
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
-    await Activity.create({ user: req.user.userId, action: 'DELETE', entity: 'StockTransfer', entityId: transfer._id, details: `Deleted transfer ${transfer.transferId}` });
     global.io?.emit('stockTransfer:deleted', { id: transfer._id });
     res.json({ message: 'Transfer deleted' });
   } catch (error) {
