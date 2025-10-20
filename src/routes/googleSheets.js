@@ -5,9 +5,18 @@ const Inventory = require('../models/inventory');
 const Transaction = require('../models/transaction');
 const Delivery = require('../models/delivery');
 const Attendance = require('../models/attendance');
-const { authenticate, authorize } = require('../middlewares/auth');
+const { authMiddleware } = require('../middlewares/auth');
 
-router.post('/sync', authenticate, authorize(['Admin']), async (req, res) => {
+const authorize = (roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    next();
+  };
+};
+
+router.post('/sync', authMiddleware, authorize(['Admin']), async (req, res) => {
   try {
     const { spreadsheetId, syncTypes } = req.body;
 
@@ -53,7 +62,7 @@ router.post('/sync', authenticate, authorize(['Admin']), async (req, res) => {
   }
 });
 
-router.post('/auto-sync', authenticate, authorize(['Admin']), async (req, res) => {
+router.post('/auto-sync', authMiddleware, authorize(['Admin']), async (req, res) => {
   try {
     const { spreadsheetId, enabled, interval } = req.body;
     res.json({ message: 'Auto-sync configured', spreadsheetId, enabled, interval });

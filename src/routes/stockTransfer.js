@@ -3,9 +3,9 @@ const router = express.Router();
 const StockTransfer = require('../models/stockTransfer');
 const Inventory = require('../models/inventory');
 const Transaction = require('../models/transaction');
-const { authenticate } = require('../middlewares/auth');
+const { authMiddleware } = require('../middlewares/auth');
 
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   try {
     const { item, fromSite, toSite, quantity, notes, reason } = req.body;
     if (!item || !fromSite || !toSite || !quantity) {
@@ -32,7 +32,7 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const transfers = await StockTransfer.find()
       .populate('item', 'name sku')
@@ -49,7 +49,7 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const transfer = await StockTransfer.findById(req.params.id)
       .populate('item')
@@ -66,7 +66,7 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-router.put('/:id/approve', authenticate, async (req, res) => {
+router.put('/:id/approve', authMiddleware, async (req, res) => {
   try {
     const transfer = await StockTransfer.findById(req.params.id);
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
@@ -98,7 +98,7 @@ router.put('/:id/approve', authenticate, async (req, res) => {
   }
 });
 
-router.put('/:id/receive', authenticate, async (req, res) => {
+router.put('/:id/receive', authMiddleware, async (req, res) => {
   try {
     const transfer = await StockTransfer.findById(req.params.id);
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
@@ -129,7 +129,7 @@ router.put('/:id/receive', authenticate, async (req, res) => {
   }
 });
 
-router.put('/:id/cancel', authenticate, async (req, res) => {
+router.put('/:id/cancel', authMiddleware, async (req, res) => {
   try {
     const transfer = await StockTransfer.findById(req.params.id);
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
@@ -146,7 +146,7 @@ router.put('/:id/cancel', authenticate, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticate, async (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
   try {
     const transfer = await StockTransfer.findByIdAndDelete(req.params.id);
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
