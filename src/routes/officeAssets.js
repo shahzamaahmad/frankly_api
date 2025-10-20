@@ -48,6 +48,7 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
     const assetData = { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
 
     if (req.file) {
+      console.log('File received:', req.file.originalname, req.file.size);
       try {
         const result = await new Promise((resolve, reject) => {
           cloudinary.uploader.upload_stream(
@@ -58,14 +59,17 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
             }
           ).end(req.file.buffer);
         });
+        console.log('Cloudinary upload success:', result.secure_url);
         assetData.imageUrl = result.secure_url;
       } catch (uploadError) {
+        console.error('Cloudinary upload failed:', uploadError);
         assetData.imageData = req.file.buffer;
       }
     }
 
     const asset = new OfficeAsset(assetData);
     await asset.save();
+    console.log('Asset saved with imageUrl:', asset.imageUrl);
     res.status(201).json(asset);
   } catch (err) {
     console.error('Error creating office asset:', err);
