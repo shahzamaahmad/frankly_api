@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const OfficeAsset = require('../models/officeAsset');
+const AssetTransaction = require('../models/assetTransaction');
 const { authMiddleware } = require('../middlewares/auth');
 const cloudinary = require('../utils/cloudinary');
 
@@ -81,6 +82,11 @@ router.put('/:id', authMiddleware, upload.single('image'), async (req, res) => {
   try {
     const { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description } = req.body;
 
+    const currentAsset = await OfficeAsset.findById(req.params.id);
+    if (!currentAsset) {
+      return res.status(404).json({ message: 'Office asset not found' });
+    }
+
     const updateData = { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
 
     if (req.file) {
@@ -102,10 +108,24 @@ router.put('/:id', authMiddleware, upload.single('image'), async (req, res) => {
       }
     }
 
-    const asset = await OfficeAsset.findByIdAndUpdate(req.params.id, updateData, { new: true });
-    if (!asset) {
-      return res.status(404).json({ message: 'Office asset not found' });
+    // Check if assignedTo changed and create transaction
+    if (assignedTo && assignedTo !== currentAsset.assignedTo?.toString()) {
+      const transactionId = `AST${Date.now()}`;
+      const transaction = new AssetTransaction({
+        transactionId,
+        type: 'ASSIGN',
+        asset: req.params.id,
+        employee: assignedTo,
+        assignedBy: req.user._id,
+        quantity: quantity || currentAsset.quantity,
+        assignDate: new Date(),
+        condition: condition || currentAsset.condition,
+        status: 'ACTIVE'
+      });
+      await transaction.save();
     }
+
+    const asset = await OfficeAsset.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json(asset);
   } catch (err) {
     console.error('Error updating office asset:', err);

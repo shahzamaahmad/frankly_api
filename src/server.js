@@ -23,7 +23,7 @@ const swaggerSpec = loadRoute('./swagger');
 let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes;
 let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
 let logRoutes, onesignalRoutes, contactsRoutes, appConfigRoutes, notificationsRoutes;
-let favoritesRoutes, activitiesRoutes, officeAssetsRoutes;
+let favoritesRoutes, activitiesRoutes, officeAssetsRoutes, assetTransactionsRoutes;
 
 const initRoutes = () => {
   authRoutes = loadRoute('./routes/auth');
@@ -42,6 +42,7 @@ const initRoutes = () => {
   favoritesRoutes = loadRoute('./routes/favorites');
   activitiesRoutes = loadRoute('./routes/activities');
   officeAssetsRoutes = loadRoute('./routes/officeAssets');
+  assetTransactionsRoutes = loadRoute('./routes/assetTransactions');
 };
 
 initRoutes();
@@ -95,6 +96,7 @@ try {
   app.use('/api/favorites', authMiddleware, favoritesRoutes);
   app.use('/api/activities', authMiddleware, activitiesRoutes);
   app.use('/api/office-assets', authMiddleware, officeAssetsRoutes);
+  app.use('/api/asset-transactions', authMiddleware, assetTransactionsRoutes);
 } catch (err) {
   console.error('Route setup error:', err);
   process.exit(1);
