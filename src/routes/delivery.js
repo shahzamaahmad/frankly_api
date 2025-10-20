@@ -18,10 +18,10 @@ const upload = multer({
   }
 });
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
-const checkPermission = require('../middlewares/checkPermission');
+const { checkPermission, checkAdmin } = require('../middlewares/checkPermission');
 const { createLog } = require('../utils/logger');
 
-router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
+router.post('/', checkAdmin(), (req, res, next) => {
   upload.single('invoice')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     next();
@@ -103,7 +103,7 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
   }
 });
 
-router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
+router.get('/', checkPermission(), async (req, res) => {
   try {
     const list = await Delivery.find().populate('items.itemName', 'name sku');
     res.json(list);
@@ -113,7 +113,7 @@ router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
   }
 });
 
-router.get('/:id', checkPermission('viewDeliveries'), async (req, res) => {
+router.get('/:id', checkPermission(), async (req, res) => {
   try {
     const item = await Delivery.findById(req.params.id).populate('items.itemName', 'name sku');
     if (!item) return res.status(404).json({ error: 'Delivery not found' });
@@ -124,7 +124,7 @@ router.get('/:id', checkPermission('viewDeliveries'), async (req, res) => {
   }
 });
 
-router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
+router.put('/:id', checkAdmin(), (req, res, next) => {
   upload.single('invoice')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     next();
@@ -187,7 +187,7 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
   }
 });
 
-router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
+router.delete('/:id', checkAdmin(), async (req, res) => {
   try {
     const delivery = await Delivery.findById(req.params.id);
     if (!delivery) {

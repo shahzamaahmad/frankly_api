@@ -37,7 +37,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // POST create office asset
-router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
+const { checkAdmin } = require('../middlewares/checkPermission');
+router.post('/', authMiddleware, checkAdmin(), upload.single('image'), async (req, res) => {
   try {
     const { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description, transactionType } = req.body;
 
@@ -81,7 +82,7 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
 });
 
 // PUT update office asset
-router.put('/:id', authMiddleware, upload.single('image'), async (req, res) => {
+router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (req, res) => {
   try {
     const { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description } = req.body;
 
@@ -160,7 +161,7 @@ router.put('/:id', authMiddleware, upload.single('image'), async (req, res) => {
 });
 
 // DELETE office asset
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkAdmin(), async (req, res) => {
   try {
     const asset = await OfficeAsset.findByIdAndDelete(req.params.id);
     if (!asset) {

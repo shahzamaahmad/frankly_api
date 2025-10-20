@@ -22,5 +22,3 @@ const checkPermission = (permission) => {
 };
 
 module.exports = { checkAdmin, checkPermission };
-
-module.exports = checkPermission;

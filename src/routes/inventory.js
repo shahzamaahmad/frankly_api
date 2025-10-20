@@ -64,10 +64,10 @@ const upload = multer({
   }
 });
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
-const checkPermission = require('../middlewares/checkPermission');
+const { checkPermission, checkAdmin } = require('../middlewares/checkPermission');
 
 // Create inventory (with optional image upload - base64/binary)
-router.post('/', checkPermission('addInventory'), (req, res, next) => {
+router.post('/', checkAdmin(), (req, res, next) => {
   upload.single('image')(req, res, (err) => {
     if (err && err.message !== 'Invalid file type') return res.status(400).json({ error: err.message });
     next();
@@ -115,7 +115,7 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
 });
 
 // Get all (with optional filters and sorting)
-router.get('/', checkPermission('viewInventory'), async (req, res) => {
+router.get('/', checkPermission(), async (req, res) => {
   try {
     const filters = {};
     if (req.query.type && typeof req.query.type === 'string') filters.type = req.query.type;
@@ -146,7 +146,7 @@ router.get('/', checkPermission('viewInventory'), async (req, res) => {
 });
 
 // Search by barcode
-router.get('/barcode/:barcode', checkPermission('viewInventory'), async (req, res) => {
+router.get('/barcode/:barcode', checkPermission(), async (req, res) => {
   try {
     const inv = await Inventory.findOne({ barcode: req.params.barcode });
     if (!inv) return res.status(404).json({ error: 'Item not found' });
@@ -158,7 +158,7 @@ router.get('/barcode/:barcode', checkPermission('viewInventory'), async (req, re
 });
 
 // Search by SKU
-router.get('/sku/:sku', checkPermission('viewInventory'), async (req, res) => {
+router.get('/sku/:sku', checkPermission(), async (req, res) => {
   try {
     const inv = await Inventory.findOne({ sku: req.params.sku });
     if (!inv) return res.status(404).json({ error: 'Item not found' });
@@ -170,7 +170,7 @@ router.get('/sku/:sku', checkPermission('viewInventory'), async (req, res) => {
 });
 
 // Get single
-router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
+router.get('/:id', checkPermission(), async (req, res) => {
   try {
     const inv = await Inventory.findById(req.params.id);
     if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
@@ -182,7 +182,7 @@ router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
 });
 
 // Update (PUT)
-router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
+router.put('/:id', checkAdmin(), (req, res, next) => {
   upload.single('image')(req, res, (err) => {
     if (err && err.message !== 'Invalid file type') return res.status(400).json({ error: err.message });
     next();
@@ -238,7 +238,7 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
 });
 
 // Patch
-router.patch('/:id', checkPermission('editInventory'), async (req, res) => {
+router.patch('/:id', checkAdmin(), async (req, res) => {
   try {
     const allowedFields = ['currentStock', 'status', 'remark'];
     const updates = {};
@@ -255,7 +255,7 @@ router.patch('/:id', checkPermission('editInventory'), async (req, res) => {
 });
 
 // Delete
-router.delete('/:id', checkPermission('deleteInventory'), async (req, res) => {
+router.delete('/:id', checkAdmin(), async (req, res) => {
   try {
     const item = await Inventory.findById(req.params.id);
     if (!item) {
@@ -274,7 +274,7 @@ router.delete('/:id', checkPermission('deleteInventory'), async (req, res) => {
 });
 
 // Recalculate stock
-router.post('/:id/recalculate', checkPermission('editInventory'), async (req, res) => {
+router.post('/:id/recalculate', checkAdmin(), async (req, res) => {
   try {
     const Transaction = require('../models/transaction');
     const Delivery = require('../models/delivery');

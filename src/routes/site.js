@@ -2,9 +2,9 @@
 const express = require('express');
 const router = express.Router();
 const Site = require('../models/site');
-const checkPermission = require('../middlewares/checkPermission');
+const { checkPermission, checkAdmin } = require('../middlewares/checkPermission');
 
-router.post('/', checkPermission('addSites'), async (req, res) => {
+router.post('/', checkAdmin(), async (req, res) => {
   try {
     if (!req.body.siteCode || !req.body.siteName) {
       return res.status(400).json({ error: 'Site code and name are required' });
@@ -19,7 +19,7 @@ router.post('/', checkPermission('addSites'), async (req, res) => {
   }
 });
 
-router.get('/', checkPermission('viewSites'), async (req, res) => {
+router.get('/', checkPermission(), async (req, res) => {
   try {
     const list = await Site.find()
       .populate('engineer', 'username fullName')
@@ -33,7 +33,7 @@ router.get('/', checkPermission('viewSites'), async (req, res) => {
   }
 });
 
-router.get('/:id', checkPermission('viewSites'), async (req, res) => {
+router.get('/:id', checkPermission(), async (req, res) => {
   try {
     const item = await Site.findById(req.params.id)
       .populate('engineer', 'username fullName')
@@ -47,7 +47,7 @@ router.get('/:id', checkPermission('viewSites'), async (req, res) => {
   }
 });
 
-router.put('/:id', checkPermission('editSites'), async (req, res) => {
+router.put('/:id', checkAdmin(), async (req, res) => {
   try {
     const allowedFields = ['siteCode', 'siteName', 'engineer', 'siteManager', 'safetyOfficer', 'location', 'status', 'description'];
     const updates = {};
@@ -67,7 +67,7 @@ router.put('/:id', checkPermission('editSites'), async (req, res) => {
   }
 });
 
-router.delete('/:id', checkPermission('deleteSites'), async (req, res) => {
+router.delete('/:id', checkAdmin(), async (req, res) => {
   try {
     const site = await Site.findById(req.params.id);
     if (!site) {

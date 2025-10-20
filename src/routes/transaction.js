@@ -3,12 +3,12 @@ const router = express.Router();
 const Transaction = require('../models/transaction');
 const Inventory = require('../models/inventory');
 const { authMiddleware } = require('../middlewares/auth');
-const checkPermission = require('../middlewares/checkPermission');
+const { checkPermission, checkAdmin } = require('../middlewares/checkPermission');
 const { createLog } = require('../utils/logger');
 
 const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
 
-router.get('/', authMiddleware, checkPermission('viewTransactions'), async (req, res) => {
+router.get('/', authMiddleware, checkPermission(), async (req, res) => {
   try {
     const { site, item } = req.query;
     const filter = {};
@@ -27,7 +27,7 @@ router.get('/', authMiddleware, checkPermission('viewTransactions'), async (req,
   }
 });
 
-router.get('/:id', authMiddleware, checkPermission('viewTransactions'), async (req, res) => {
+router.get('/:id', authMiddleware, checkPermission(), async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id)
       .populate('employee', 'fullName username email')
@@ -41,7 +41,7 @@ router.get('/:id', authMiddleware, checkPermission('viewTransactions'), async (r
   }
 });
 
-router.post('/', authMiddleware, checkPermission('addTransactions'), async (req, res) => {
+router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
   try {
     const { type, employee, site, item, quantity, returnDetails, relatedTo, timestamp } = req.body;
     
@@ -102,7 +102,7 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
   }
 });
 
-router.put('/:id', authMiddleware, checkPermission('editTransactions'), async (req, res) => {
+router.put('/:id', authMiddleware, checkAdmin(), async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
@@ -158,7 +158,7 @@ router.put('/:id', authMiddleware, checkPermission('editTransactions'), async (r
   }
 });
 
-router.delete('/:id', authMiddleware, checkPermission('deleteTransactions'), async (req, res) => {
+router.delete('/:id', authMiddleware, checkAdmin(), async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
