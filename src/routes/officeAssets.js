@@ -150,7 +150,7 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
         employee: assignedTo || currentAsset.assignedTo,
         assignedBy: req.user._id,
         quantity: transactionQuantity,
-        assignDate: transactionType === 'ASSIGN' ? new Date() : undefined,
+        assignDate: new Date(),
         returnDate: transactionType === 'RETURN' ? new Date() : undefined,
         condition: condition || currentAsset.condition,
         status: transactionType === 'ASSIGN' ? 'ACTIVE' : 'RETURNED'
