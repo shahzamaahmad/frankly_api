@@ -180,4 +180,46 @@ router.post('/:id/assign-asset', checkPermission('editEmployees'), async (req, r
   }
 });
 
+router.post('/:id/assign-office-asset', checkPermission('editEmployees'), async (req, res) => {
+  try {
+    const { assetId, quantity, condition, remarks } = req.body;
+    const OfficeAsset = require('../models/officeAsset');
+    const AssetTransaction = require('../models/assetTransaction');
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const officeAsset = await OfficeAsset.findById(assetId);
+    if (!officeAsset) return res.status(404).json({ message: 'Office asset not found' });
+
+    if (officeAsset.quantity < quantity) {
+      return res.status(400).json({ message: 'Insufficient asset quantity' });
+    }
+
+    officeAsset.assignedTo = req.params.id;
+    officeAsset.quantity -= quantity;
+    await officeAsset.save();
+
+    const transactionId = `AST${Date.now()}`;
+    const transaction = new AssetTransaction({
+      transactionId,
+      type: 'ASSIGN',
+      asset: assetId,
+      employee: req.params.id,
+      assignedBy: req.user._id,
+      quantity,
+      assignDate: new Date(),
+      condition,
+      remarks,
+      status: 'ACTIVE'
+    });
+    await transaction.save();
+
+    res.json({ message: 'Office asset assigned successfully' });
+  } catch (err) {
+    console.error('Assign office asset error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 module.exports = router;
