@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/user');
-const checkPermission = require('../middlewares/checkPermission');
+const { checkPermission, checkAdmin } = require('../middlewares/checkPermission');
 
-router.get('/', checkPermission('viewEmployees'), async (req, res) => {
+router.get('/', checkPermission(), async (req, res) => {
   try {
     const users = await User.find()
       .select('-password')
@@ -15,7 +15,7 @@ router.get('/', checkPermission('viewEmployees'), async (req, res) => {
   }
 });
 
-router.get('/:id', checkPermission('viewEmployees'), async (req, res) => {
+router.get('/:id', checkPermission(), async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -26,7 +26,7 @@ router.get('/:id', checkPermission('viewEmployees'), async (req, res) => {
   }
 });
 
-router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
+router.put('/:id', checkAdmin(), async (req, res) => {
   try {
     const updates = { ...req.body };
 
@@ -66,7 +66,7 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
   }
 });
 
-router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
+router.delete('/:id', checkAdmin(), async (req, res) => {
   try {
     if (req.params.id === req.user.id) {
       return res.status(400).json({ message: 'Cannot delete your own account' });
@@ -131,7 +131,7 @@ router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.post('/:id/assign-asset', checkPermission('editEmployees'), async (req, res) => {
+router.post('/:id/assign-asset', checkAdmin(), async (req, res) => {
   try {
     const { item, quantity, condition, remarks } = req.body;
     const Inventory = require('../models/inventory');
@@ -180,7 +180,7 @@ router.post('/:id/assign-asset', checkPermission('editEmployees'), async (req, r
   }
 });
 
-router.post('/:id/assign-office-asset', checkPermission('editEmployees'), async (req, res) => {
+router.post('/:id/assign-office-asset', checkAdmin(), async (req, res) => {
   try {
     const { assetId, quantity, condition, remarks } = req.body;
     const OfficeAsset = require('../models/officeAsset');
