@@ -180,8 +180,7 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-process.on('SIGTERM', () => {
-  mongoose.connection.close(false, () => {
-    process.exit(0);
-  });
+process.on('SIGTERM', async () => {
+  await mongoose.connection.close();
+  process.exit(0);
 });
