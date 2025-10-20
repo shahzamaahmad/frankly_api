@@ -106,40 +106,43 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
       }
     }
 
-    // Handle quantity changes based on transaction type
-    const transactionType = req.body.transactionType || 'ASSIGN';
-    const transactionQuantity = parseInt(quantity) || 1;
-    
-    if (transactionType === 'ASSIGN') {
-      // Decrease quantity when assigning
-      updateData.quantity = Math.max(0, currentAsset.quantity - transactionQuantity);
-    } else if (transactionType === 'RETURN') {
-      // Increase quantity when returning
-      updateData.quantity = currentAsset.quantity + transactionQuantity;
+    // Handle quantity changes based on transaction type (only if transactionType is provided)
+    if (req.body.transactionType) {
+      const transactionType = req.body.transactionType;
+      const transactionQuantity = parseInt(req.body.quantity) || 1;
+      
+      if (transactionType === 'ASSIGN') {
+        updateData.quantity = Math.max(0, currentAsset.quantity - transactionQuantity);
+      } else if (transactionType === 'RETURN') {
+        updateData.quantity = currentAsset.quantity + transactionQuantity;
+      }
+    } else {
+      updateData.quantity = parseInt(quantity) || currentAsset.quantity;
     }
 
-    // Generate transaction ID in format OTXN-DDMMYY-001
-    const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = String(now.getFullYear()).slice(-2);
-    const datePrefix = `OTXN-${day}${month}${year}`;
-    
-    // Find the highest sequence number for today
-    const existingTransactions = await AssetTransaction.find({
-      transactionId: { $regex: `^${datePrefix}-` }
-    }).sort({ transactionId: -1 }).limit(1);
-    
-    let sequenceNumber = 1;
-    if (existingTransactions.length > 0) {
-      const lastId = existingTransactions[0].transactionId;
-      const lastSequence = parseInt(lastId.split('-')[2]) || 0;
-      sequenceNumber = lastSequence + 1;
-    }
-    
-    const transactionId = `${datePrefix}-${String(sequenceNumber).padStart(3, '0')}`;
-    // Only create transaction if employee is provided
-    if (assignedTo || currentAsset.assignedTo) {
+    // Only create transaction if transactionType is provided
+    if (req.body.transactionType && (assignedTo || currentAsset.assignedTo)) {
+      const transactionType = req.body.transactionType;
+      const transactionQuantity = parseInt(req.body.quantity) || 1;
+      
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = String(now.getFullYear()).slice(-2);
+      const datePrefix = `OTXN-${day}${month}${year}`;
+      
+      const existingTransactions = await AssetTransaction.find({
+        transactionId: { $regex: `^${datePrefix}-` }
+      }).sort({ transactionId: -1 }).limit(1);
+      
+      let sequenceNumber = 1;
+      if (existingTransactions.length > 0) {
+        const lastId = existingTransactions[0].transactionId;
+        const lastSequence = parseInt(lastId.split('-')[2]) || 0;
+        sequenceNumber = lastSequence + 1;
+      }
+      
+      const transactionId = `${datePrefix}-${String(sequenceNumber).padStart(3, '0')}`;
       const transaction = new AssetTransaction({
         transactionId,
         type: transactionType,
