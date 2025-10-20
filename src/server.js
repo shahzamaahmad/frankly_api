@@ -130,6 +130,9 @@ mongoose.connect(process.env.MONGODB_URI, {
 }).then(async () => {
   const googleSheets = require('./utils/googleSheets');
   await googleSheets.initialize();
+  
+  const { startDailySync } = require('./utils/cronJobs');
+  startDailySync();
   const http = require('http');
   const socketIo = require('socket.io');
   const server = http.createServer(app);
