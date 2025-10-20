@@ -118,6 +118,14 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     }
 
     await AssetTransaction.findByIdAndDelete(req.params.id);
+    
+    const Log = require('../models/log');
+    await Log.create({
+      userId: req.user._id,
+      action: 'DELETE',
+      details: `Deleted asset transaction: ${transaction.transactionId}`,
+      timestamp: new Date()
+    });
 
     const io = req.app.get('io');
     if (io) {

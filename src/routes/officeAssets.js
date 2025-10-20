@@ -69,6 +69,15 @@ router.post('/', authMiddleware, checkAdmin(), upload.single('image'), async (re
 
     const asset = new OfficeAsset(assetData);
     await asset.save();
+    
+    const Log = require('../models/log');
+    await Log.create({
+      userId: req.user._id,
+      action: 'ADD',
+      details: `Added office asset: ${asset.name} (${asset.sku})`,
+      timestamp: new Date()
+    });
+    
     console.log('Asset saved with imageUrl:', asset.imageUrl);
     res.status(201).json(asset);
   } catch (err) {
@@ -157,11 +166,27 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
       });
       await transaction.save();
       
+      const Log = require('../models/log');
+      await Log.create({
+        userId: req.user._id,
+        action: 'ADD',
+        details: `${transactionType} office asset: ${currentAsset.name} to employee`,
+        timestamp: new Date()
+      });
+      
       const io = req.app.get('io');
       if (io) io.emit('assetTransaction:created', transaction);
     }
 
     const asset = await OfficeAsset.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    
+    const Log = require('../models/log');
+    await Log.create({
+      userId: req.user._id,
+      action: 'EDIT',
+      details: `Edited office asset: ${asset.name} (${asset.sku})`,
+      timestamp: new Date()
+    });
     
     const io = req.app.get('io');
     if (io) io.emit('officeAsset:updated', asset);
@@ -180,6 +205,15 @@ router.delete('/:id', authMiddleware, checkAdmin(), async (req, res) => {
     if (!asset) {
       return res.status(404).json({ message: 'Office asset not found' });
     }
+    
+    const Log = require('../models/log');
+    await Log.create({
+      userId: req.user._id,
+      action: 'DELETE',
+      details: `Deleted office asset: ${asset.name} (${asset.sku})`,
+      timestamp: new Date()
+    });
+    
     res.json({ message: 'Office asset deleted successfully' });
   } catch (err) {
     console.error('Error deleting office asset:', err);
