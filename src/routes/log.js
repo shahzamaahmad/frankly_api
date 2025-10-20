@@ -5,13 +5,13 @@ const { authMiddleware } = require('../middlewares/auth');
 
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Admin only' });
-    }
-    const logs = await Log.find().sort({ timestamp: -1 }).limit(500);
+    const limit = parseInt(req.query.limit) || 50;
+    const query = req.user.role === 'admin' ? {} : { userId: req.user.userId };
+    const logs = await Log.find(query).sort({ timestamp: -1 }).limit(limit).lean();
     res.json(logs);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('Fetch logs error:', err);
+    res.status(500).json({ message: 'Failed to fetch logs' });
   }
 });
 
