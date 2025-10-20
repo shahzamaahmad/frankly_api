@@ -4,19 +4,22 @@ const attendanceSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   checkIn: {
     type: Date,
-    required: true
+    required: true,
+    index: true
   },
   checkOut: {
-    type: Date
+    type: Date,
+    index: true
   },
   checkInLocation: {
-    latitude: Number,
-    longitude: Number,
-    address: String
+    latitude: { type: Number, required: true },
+    longitude: { type: Number, required: true },
+    address: { type: String, required: true }
   },
   checkOutLocation: {
     latitude: Number,
@@ -29,36 +32,31 @@ const attendanceSchema = new mongoose.Schema({
   },
   date: {
     type: String,
-    required: true
+    required: true,
+    index: true
   },
   sessionNumber: {
     type: Number,
-    default: 1
+    default: 1,
+    index: true
   },
   approvalStatus: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
-    default: 'pending'
+    default: 'approved'
   },
+  rejectionReason: String,
   approvedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  approvedAt: {
-    type: Date
-  },
-  rejectionReason: {
-    type: String
-  }
-}, { timestamps: true });
+  approvedAt: Date
+}, {
+  timestamps: true
+});
 
 attendanceSchema.index({ user: 1, date: 1 });
-attendanceSchema.index({ date: 1 });
-attendanceSchema.index({ user: 1 });
-attendanceSchema.index({ checkIn: -1 });
-attendanceSchema.index({ checkOut: 1 });
-attendanceSchema.index({ date: 1, checkIn: -1 });
-attendanceSchema.index({ user: 1, checkIn: -1 });
-attendanceSchema.index({ sessionNumber: 1 });
+attendanceSchema.index({ date: 1, checkIn: 1 });
+attendanceSchema.index({ user: 1, checkIn: 1 });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);
