@@ -98,24 +98,97 @@ class GoogleSheetsService {
     });
   }
 
-  async syncAttendance(spreadsheetId, attendance) {
+  async syncSites(spreadsheetId, sites) {
     if (!this.sheets) return;
 
     const values = [
-      ['Employee', 'Date', 'Check In', 'Check Out', 'Working Hours', 'Session'],
-      ...attendance.map(att => [
-        att.user?.fullName || att.user || '',
-        att.date || '',
-        att.checkIn ? new Date(att.checkIn).toLocaleTimeString() : '',
-        att.checkOut ? new Date(att.checkOut).toLocaleTimeString() : '',
-        att.workingHours || 0,
-        att.sessionNumber || 1
+      ['Site Code', 'Site Name', 'Sector', 'Location', 'Status', 'Engineer', 'Manager'],
+      ...sites.map(site => [
+        site.siteCode || '',
+        site.siteName || '',
+        site.sector || '',
+        site.location || '',
+        site.status || '',
+        site.engineer || '',
+        site.siteManager || ''
       ])
     ];
 
     await this.sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: 'Attendance!A1',
+      range: 'Sites!A1',
+      valueInputOption: 'RAW',
+      resource: { values }
+    });
+  }
+
+  async syncEmployees(spreadsheetId, employees) {
+    if (!this.sheets) return;
+
+    const values = [
+      ['Employee ID', 'Full Name', 'Username', 'Role', 'Email', 'Phone', 'Status'],
+      ...employees.map(emp => [
+        emp.employeeId || '',
+        emp.fullName || '',
+        emp.username || '',
+        emp.role || '',
+        emp.email || '',
+        emp.phone || '',
+        emp.isActive ? 'Active' : 'Inactive'
+      ])
+    ];
+
+    await this.sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: 'Employees!A1',
+      valueInputOption: 'RAW',
+      resource: { values }
+    });
+  }
+
+  async syncAssets(spreadsheetId, assets) {
+    if (!this.sheets) return;
+
+    const values = [
+      ['Asset Code', 'Name', 'Category', 'Current Stock', 'Unit Cost', 'Condition', 'Status'],
+      ...assets.map(asset => [
+        asset.assetCode || '',
+        asset.name || '',
+        asset.category || '',
+        asset.currentStock || 0,
+        asset.unitCost || 0,
+        asset.condition || '',
+        asset.status || ''
+      ])
+    ];
+
+    await this.sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: 'Assets!A1',
+      valueInputOption: 'RAW',
+      resource: { values }
+    });
+  }
+
+  async syncAssetTransactions(spreadsheetId, transactions) {
+    if (!this.sheets) return;
+
+    const values = [
+      ['Transaction ID', 'Type', 'Asset', 'Quantity', 'Employee', 'Date', 'Condition'],
+      ...transactions.map(txn => [
+        txn.transactionId || '',
+        txn.type || '',
+        txn.asset?.name || txn.asset || '',
+        txn.quantity || 0,
+        txn.employee?.fullName || txn.employee || '',
+        txn.date ? new Date(txn.date).toLocaleDateString() : '',
+        txn.condition || ''
+      ])
+    ];
+
+    await this.sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: 'AssetTransactions!A1',
       valueInputOption: 'RAW',
       resource: { values }
     });

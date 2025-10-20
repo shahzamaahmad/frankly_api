@@ -4,7 +4,10 @@ const googleSheets = require('../utils/googleSheets');
 const Inventory = require('../models/inventory');
 const Transaction = require('../models/transaction');
 const Delivery = require('../models/delivery');
-const Attendance = require('../models/attendance');
+const Site = require('../models/site');
+const User = require('../models/user');
+const OfficeAsset = require('../models/officeAsset');
+const OfficeAssetTransaction = require('../models/officeAssetTransaction');
 const { authMiddleware } = require('../middlewares/auth');
 
 const authorize = (roles) => {
@@ -16,7 +19,7 @@ const authorize = (roles) => {
   };
 };
 
-router.post('/sync', authMiddleware, authorize(['Admin']), async (req, res) => {
+router.post('/sync', authMiddleware, authorize(['admin']), async (req, res) => {
   try {
     const { spreadsheetId, syncTypes } = req.body;
 
@@ -47,12 +50,31 @@ router.post('/sync', authMiddleware, authorize(['Admin']), async (req, res) => {
       results.deliveries = deliveries.length;
     }
 
-    if (syncTypes.includes('attendance')) {
-      const attendance = await Attendance.find()
-        .populate('user', 'fullName')
+    if (syncTypes.includes('sites')) {
+      const sites = await Site.find().lean();
+      await googleSheets.syncSites(spreadsheetId, sites);
+      results.sites = sites.length;
+    }
+
+    if (syncTypes.includes('employees')) {
+      const employees = await User.find().lean();
+      await googleSheets.syncEmployees(spreadsheetId, employees);
+      results.employees = employees.length;
+    }
+
+    if (syncTypes.includes('assets')) {
+      const assets = await OfficeAsset.find().lean();
+      await googleSheets.syncAssets(spreadsheetId, assets);
+      results.assets = assets.length;
+    }
+
+    if (syncTypes.includes('assetTransactions')) {
+      const assetTransactions = await OfficeAssetTransaction.find()
+        .populate('asset', 'name')
+        .populate('employee', 'fullName')
         .lean();
-      await googleSheets.syncAttendance(spreadsheetId, attendance);
-      results.attendance = attendance.length;
+      await googleSheets.syncAssetTransactions(spreadsheetId, assetTransactions);
+      results.assetTransactions = assetTransactions.length;
     }
 
     res.json({ message: 'Sync completed', results });
@@ -62,7 +84,7 @@ router.post('/sync', authMiddleware, authorize(['Admin']), async (req, res) => {
   }
 });
 
-router.post('/auto-sync', authMiddleware, authorize(['Admin']), async (req, res) => {
+router.post('/auto-sync', authMiddleware, authorize(['admin']), async (req, res) => {
   try {
     const { spreadsheetId, enabled, interval } = req.body;
     res.json({ message: 'Auto-sync configured', spreadsheetId, enabled, interval });
