@@ -117,8 +117,26 @@ router.put('/:id', authMiddleware, upload.single('image'), async (req, res) => {
       updateData.quantity = currentAsset.quantity + transactionQuantity;
     }
 
-    // Create transaction record
-    const transactionId = `AST${Date.now()}`;
+    // Generate transaction ID in format OTXN-DDMMYY-001
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2);
+    const datePrefix = `OTXN-${day}${month}${year}`;
+    
+    // Find the highest sequence number for today
+    const existingTransactions = await AssetTransaction.find({
+      transactionId: { $regex: `^${datePrefix}-` }
+    }).sort({ transactionId: -1 }).limit(1);
+    
+    let sequenceNumber = 1;
+    if (existingTransactions.length > 0) {
+      const lastId = existingTransactions[0].transactionId;
+      const lastSequence = parseInt(lastId.split('-')[2]) || 0;
+      sequenceNumber = lastSequence + 1;
+    }
+    
+    const transactionId = `${datePrefix}-${String(sequenceNumber).padStart(3, '0')}`;
     const transaction = new AssetTransaction({
       transactionId,
       type: transactionType,
