@@ -8,15 +8,16 @@ const checkPermission = (permission) => {
       return next();
     }
 
-    if (!req.user.permissions || !req.user.permissions[permission]) {
-      return res.status(403).json({ 
-        message: 'You do not have permission to access this feature. Please contact your administrator.', 
-        requiresPermission: true,
-        permission: permission 
-      });
+    // Only allow view operations for non-admin users
+    if (permission.startsWith('view')) {
+      return next();
     }
 
-    next();
+    return res.status(403).json({ 
+      message: 'Only admin can perform this operation', 
+      requiresPermission: true,
+      permission: permission 
+    });
   };
 };
 
