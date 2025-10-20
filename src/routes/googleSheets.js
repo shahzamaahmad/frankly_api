@@ -12,7 +12,8 @@ const { authMiddleware } = require('../middlewares/auth');
 
 const authorize = (roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    console.log('User role:', req.user.role, 'Required roles:', roles);
+    if (!roles.includes(req.user.role.toLowerCase())) {
       return res.status(403).json({ message: 'Access denied' });
     }
     next();

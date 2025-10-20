@@ -68,6 +68,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
 router.put('/:id/approve', authMiddleware, async (req, res) => {
   try {
+    console.log('Approve - User role:', req.user.role);
     const transfer = await StockTransfer.findById(req.params.id);
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
     if (transfer.status !== 'PENDING') return res.status(400).json({ message: 'Transfer already processed' });

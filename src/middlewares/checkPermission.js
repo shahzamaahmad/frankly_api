@@ -4,7 +4,7 @@ const checkAdmin = () => {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    if (req.user.role !== 'admin') {
+    if (req.user.role?.toLowerCase() !== 'admin') {
       return res.status(403).json({ message: 'Admin access required' });
     }
 
