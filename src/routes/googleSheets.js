@@ -7,7 +7,7 @@ const Delivery = require('../models/delivery');
 const Site = require('../models/site');
 const User = require('../models/user');
 const OfficeAsset = require('../models/officeAsset');
-const OfficeAssetTransaction = require('../models/officeAssetTransaction');
+const AssetTransaction = require('../models/assetTransaction');
 const { authMiddleware } = require('../middlewares/auth');
 
 const authorize = (roles) => {
@@ -69,7 +69,7 @@ router.post('/sync', authMiddleware, authorize(['admin']), async (req, res) => {
     }
 
     if (syncTypes.includes('assetTransactions')) {
-      const assetTransactions = await OfficeAssetTransaction.find()
+      const assetTransactions = await AssetTransaction.find()
         .populate('asset', 'name')
         .populate('employee', 'fullName')
         .lean();
