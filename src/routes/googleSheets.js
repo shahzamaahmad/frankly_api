@@ -21,10 +21,14 @@ const authorize = (roles) => {
 
 router.post('/sync', authMiddleware, authorize(['admin']), async (req, res) => {
   try {
-    const { spreadsheetId, syncTypes } = req.body;
+    let { spreadsheetId, syncTypes } = req.body;
 
     if (!spreadsheetId) {
-      return res.status(400).json({ message: 'Spreadsheet ID required' });
+      spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+    }
+
+    if (!spreadsheetId) {
+      return res.status(400).json({ message: 'Spreadsheet ID not configured in .env' });
     }
 
     const results = {};
