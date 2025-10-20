@@ -67,4 +67,23 @@ router.put('/:id/return', authMiddleware, async (req, res) => {
   }
 });
 
+// DELETE asset transaction (admin only)
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+
+    const transaction = await AssetTransaction.findByIdAndDelete(req.params.id);
+    if (!transaction) {
+      return res.status(404).json({ message: 'Asset transaction not found' });
+    }
+
+    res.json({ message: 'Asset transaction deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting asset transaction:', err);
+    res.status(500).json({ message: 'Failed to delete asset transaction' });
+  }
+});
+
 module.exports = router;
