@@ -34,6 +34,9 @@ const transactionSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
+  remark: {
+    type: String
+  },
   returnDetails: {
     condition: {
       type: String,

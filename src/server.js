@@ -23,7 +23,7 @@ const swaggerSpec = loadRoute('./swagger');
 let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes;
 let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
 let logRoutes, onesignalRoutes, contactsRoutes, appConfigRoutes, notificationsRoutes;
-let favoritesRoutes, activitiesRoutes, officeAssetsRoutes, assetTransactionsRoutes, stockTransferRoutes;
+let favoritesRoutes, activitiesRoutes, officeAssetsRoutes, assetTransactionsRoutes, stockTransferRoutes, googleSheetsRoutes;
 
 const initRoutes = () => {
   authRoutes = loadRoute('./routes/auth');
@@ -44,6 +44,7 @@ const initRoutes = () => {
   officeAssetsRoutes = loadRoute('./routes/officeAssets');
   assetTransactionsRoutes = loadRoute('./routes/assetTransactions');
   stockTransferRoutes = loadRoute('./routes/stockTransfer');
+  googleSheetsRoutes = loadRoute('./routes/googleSheets');
 };
 
 initRoutes();
@@ -99,6 +100,7 @@ try {
   app.use('/api/office-assets', authMiddleware, officeAssetsRoutes);
   app.use('/api/asset-transactions', authMiddleware, assetTransactionsRoutes);
   app.use('/api/stock-transfers', authMiddleware, stockTransferRoutes);
+  app.use('/api/google-sheets', authMiddleware, googleSheetsRoutes);
 } catch (err) {
   console.error('Route setup error:', err);
   process.exit(1);
@@ -125,7 +127,9 @@ mongoose.connect(process.env.MONGODB_URI, {
   minPoolSize: 2,
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
-}).then(() => {
+}).then(async () => {
+  const googleSheets = require('./utils/googleSheets');
+  await googleSheets.initialize();
   const http = require('http');
   const socketIo = require('socket.io');
   const server = http.createServer(app);
