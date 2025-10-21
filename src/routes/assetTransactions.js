@@ -51,20 +51,21 @@ router.put('/:id', authMiddleware, async (req, res) => {
     const asset = await OfficeAsset.findById(oldTransaction.asset);
     
     if (asset) {
-      // Reverse old transaction
-      if (oldTransaction.type === 'ASSIGN') {
-        asset.quantity += oldTransaction.quantity;
-      } else if (oldTransaction.type === 'RETURN') {
-        asset.quantity -= oldTransaction.quantity;
-      }
-      
-      // Apply new transaction
       const newType = req.body.type || oldTransaction.type;
       const newQuantity = req.body.quantity || oldTransaction.quantity;
+      
+      // Reverse old transaction effect
+      if (oldTransaction.type === 'ASSIGN') {
+        asset.quantity += oldTransaction.quantity; // Add back
+      } else if (oldTransaction.type === 'RETURN') {
+        asset.quantity -= oldTransaction.quantity; // Remove back
+      }
+      
+      // Apply new transaction effect
       if (newType === 'ASSIGN') {
-        asset.quantity -= newQuantity;
+        asset.quantity -= newQuantity; // Subtract
       } else if (newType === 'RETURN') {
-        asset.quantity += newQuantity;
+        asset.quantity += newQuantity; // Add
       }
       
       await asset.save();
