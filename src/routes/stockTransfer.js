@@ -38,9 +38,9 @@ router.get('/', authMiddleware, async (req, res) => {
       .populate('item', 'name sku')
       .populate('fromSite', 'siteName')
       .populate('toSite', 'siteName')
-      .populate('requestedBy', 'fullName')
-      .populate('approvedBy', 'fullName')
-      .populate('receivedBy', 'fullName')
+      .populate('requestedBy', 'firstName lastName')
+      .populate('approvedBy', 'firstName lastName')
+      .populate('receivedBy', 'firstName lastName')
       .sort({ createdAt: -1 });
     res.json(transfers);
   } catch (error) {
@@ -55,9 +55,9 @@ router.get('/:id', authMiddleware, async (req, res) => {
       .populate('item')
       .populate('fromSite')
       .populate('toSite')
-      .populate('requestedBy', 'fullName')
-      .populate('approvedBy', 'fullName')
-      .populate('receivedBy', 'fullName');
+      .populate('requestedBy', 'firstName lastName')
+      .populate('approvedBy', 'firstName lastName')
+      .populate('receivedBy', 'firstName lastName');
     if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
     res.json(transfer);
   } catch (error) {
