@@ -105,9 +105,14 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
     const updateData = { sku, name, category, subCategory, brand, model, serialNumber, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
     if (quantity && !req.body.transactionType) {
       const newInitialStock = parseInt(quantity);
-      const stockDiff = newInitialStock - currentAsset.initialStock;
+      
+      // Recalculate current stock based on transactions
+      const transactions = await AssetTransaction.find({ asset: req.params.id });
+      const totalAssigned = transactions.filter(t => t.type === 'ASSIGN').reduce((sum, t) => sum + t.quantity, 0);
+      const totalReturned = transactions.filter(t => t.type === 'RETURN').reduce((sum, t) => sum + t.quantity, 0);
+      
       updateData.initialStock = newInitialStock;
-      updateData.currentStock = currentAsset.currentStock + stockDiff;
+      updateData.currentStock = newInitialStock + totalReturned - totalAssigned;
     }
 
     if (req.file) {
