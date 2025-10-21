@@ -67,6 +67,9 @@ router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
     const transactionId = `${todayPrefix}${String(nextNum).padStart(4, '0')}`;
 
     if (type === 'ISSUE') {
+      if (inventory.currentStock < quantity) {
+        return res.status(400).json({ error: `Insufficient stock. Available: ${inventory.currentStock}, Requested: ${quantity}` });
+      }
       inventory.currentStock -= quantity;
     } else if (type === 'RETURN') {
       inventory.currentStock += quantity;
@@ -127,6 +130,9 @@ router.put('/:id', authMiddleware, checkAdmin(), async (req, res) => {
     if (!newInventory) return res.status(404).json({ error: 'Item not found' });
 
     if (type === 'ISSUE') {
+      if (newInventory.currentStock < quantity) {
+        return res.status(400).json({ error: `Insufficient stock. Available: ${newInventory.currentStock}, Requested: ${quantity}` });
+      }
       newInventory.currentStock -= quantity;
     } else if (type === 'RETURN') {
       newInventory.currentStock += quantity;
