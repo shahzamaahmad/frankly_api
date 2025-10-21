@@ -177,7 +177,10 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
       });
       
       const io = req.app.get('io');
-      if (io) io.emit('assetTransaction:created', transaction);
+      if (io) {
+        io.emit('assetTransaction:created', transaction);
+        io.emit('officeAsset:updated', asset);
+      }
     }
 
     const asset = await OfficeAsset.findByIdAndUpdate(req.params.id, updateData, { new: true });
