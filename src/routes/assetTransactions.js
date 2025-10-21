@@ -49,27 +49,30 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
     const OfficeAsset = require('../models/officeAsset');
     
-    // Reverse old transaction on old asset
+    const OfficeAsset = require('../models/officeAsset');
     const oldAsset = await OfficeAsset.findById(oldTransaction.asset);
-    if (oldAsset) {
-      if (oldTransaction.type === 'ASSIGN') {
-        oldAsset.currentStock += oldTransaction.quantity;
-      } else if (oldTransaction.type === 'RETURN') {
-        oldAsset.currentStock -= oldTransaction.quantity;
-      }
-      await oldAsset.save();
+    if (!oldAsset) {
+      return res.status(404).json({ message: 'Old asset not found' });
     }
 
-    // Apply new transaction on new asset
     const newAssetId = req.body.assetId || oldTransaction.asset;
-    const newAsset = await OfficeAsset.findById(newAssetId);
-    if (!newAsset) {
-      return res.status(404).json({ message: 'Asset not found' });
-    }
-
     const newType = req.body.type || oldTransaction.type;
     const newQuantity = req.body.quantity || oldTransaction.quantity;
-    
+
+    // Reverse old transaction
+    if (oldTransaction.type === 'ASSIGN') {
+      oldAsset.currentStock += oldTransaction.quantity;
+    } else if (oldTransaction.type === 'RETURN') {
+      oldAsset.currentStock -= oldTransaction.quantity;
+    }
+    await oldAsset.save();
+
+    // Apply new transaction
+    const newAsset = await OfficeAsset.findById(newAssetId);
+    if (!newAsset) {
+      return res.status(404).json({ message: 'New asset not found' });
+    }
+
     if (newType === 'ASSIGN') {
       newAsset.currentStock -= newQuantity;
     } else if (newType === 'RETURN') {
