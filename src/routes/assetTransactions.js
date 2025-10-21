@@ -48,39 +48,46 @@ router.put('/:id', authMiddleware, async (req, res) => {
     }
 
     const OfficeAsset = require('../models/officeAsset');
-    const asset = await OfficeAsset.findById(oldTransaction.asset);
     
-    if (asset) {
-      const newType = req.body.type || oldTransaction.type;
-      const newQuantity = req.body.quantity || oldTransaction.quantity;
-      
-      // Reverse old transaction effect
+    // Reverse old transaction on old asset
+    const oldAsset = await OfficeAsset.findById(oldTransaction.asset);
+    if (oldAsset) {
       if (oldTransaction.type === 'ASSIGN') {
-        asset.currentStock += oldTransaction.quantity;
+        oldAsset.currentStock += oldTransaction.quantity;
       } else if (oldTransaction.type === 'RETURN') {
-        asset.currentStock -= oldTransaction.quantity;
+        oldAsset.currentStock -= oldTransaction.quantity;
       }
-      
-      // Apply new transaction effect
-      if (newType === 'ASSIGN') {
-        asset.currentStock -= newQuantity;
-      } else if (newType === 'RETURN') {
-        asset.currentStock += newQuantity;
-      }
-      
-      await asset.save();
+      await oldAsset.save();
     }
+
+    // Apply new transaction on new asset
+    const newAssetId = req.body.assetId || oldTransaction.asset;
+    const newAsset = await OfficeAsset.findById(newAssetId);
+    if (!newAsset) {
+      return res.status(404).json({ message: 'Asset not found' });
+    }
+
+    const newType = req.body.type || oldTransaction.type;
+    const newQuantity = req.body.quantity || oldTransaction.quantity;
+    
+    if (newType === 'ASSIGN') {
+      newAsset.currentStock -= newQuantity;
+    } else if (newType === 'RETURN') {
+      newAsset.currentStock += newQuantity;
+    }
+    await newAsset.save();
 
     const transaction = await AssetTransaction.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      { ...req.body, asset: newAssetId },
       { new: true }
     );
 
     const io = req.app.get('io');
     if (io) {
       io.emit('assetTransaction:updated', transaction);
-      if (asset) io.emit('officeAsset:updated', asset);
+      if (oldAsset) io.emit('officeAsset:updated', oldAsset);
+      if (newAsset && newAsset.id !== oldAsset?.id) io.emit('officeAsset:updated', newAsset);
     }
 
     res.json(transaction);
