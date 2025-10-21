@@ -85,21 +85,6 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-router.get('/history', authMiddleware, async (req, res) => {
-  try {
-    const transfers = await Transaction.find({ remark: { $regex: '^Stock Transfer:' } })
-      .populate('employee', 'firstName lastName username')
-      .populate('site', 'siteName siteCode')
-      .populate('item', 'name sku')
-      .sort({ timestamp: -1 })
-      .limit(50);
-    res.json(transfers);
-  } catch (error) {
-    console.error('Fetch transfer history error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const transfers = await StockTransfer.find()
