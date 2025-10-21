@@ -233,6 +233,9 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
       fromNum++;
     }
     
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const issueTime = new Date();
+    
     let lastToTxn = await Transaction.findOne({ 
       transactionId: { $regex: `^${toPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } 
     }).sort({ transactionId: -1 });
@@ -253,7 +256,7 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
         site: transfer.toSite._id,
         employee: transfer.employee,
         quantity: transferItem.quantity,
-        timestamp: now,
+        timestamp: issueTime,
         remark: `Stock Transfer: ${transfer.fromSite?.siteName || 'Unknown'} → ${transfer.toSite?.siteName || 'Unknown'}`
       });
       await issueTxn.save();
