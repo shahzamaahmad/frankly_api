@@ -204,18 +204,18 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
     const fromPrefix = `TXN-${dateStr}-${fromSiteCode}-`;
     const toPrefix = `TXN-${dateStr}-${toSiteCode}-`;
     
+    let lastFromTxn = await Transaction.findOne({ 
+      transactionId: { $regex: `^${fromPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } 
+    }).sort({ transactionId: -1 });
+    let fromNum = 1;
+    if (lastFromTxn) {
+      const match = lastFromTxn.transactionId.match(/-([0-9]+)$/);
+      if (match) fromNum = parseInt(match[1]) + 1;
+    }
+    
     for (const transferItem of transfer.items) {
       const inventory = await Inventory.findById(transferItem.item);
       if (!inventory) continue;
-      
-      const lastFromTxn = await Transaction.findOne({ 
-        transactionId: { $regex: `^${fromPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } 
-      }).sort({ transactionId: -1 });
-      let fromNum = 1;
-      if (lastFromTxn) {
-        const match = lastFromTxn.transactionId.match(/-([0-9]+)$/);
-        if (match) fromNum = parseInt(match[1]) + 1;
-      }
       
       const returnTxn = new Transaction({
         transactionId: `${fromPrefix}${String(fromNum).padStart(4, '0')}`,
@@ -229,15 +229,22 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
       });
       await returnTxn.save();
       inventory.currentStock += transferItem.quantity;
-      
-      const lastToTxn = await Transaction.findOne({ 
-        transactionId: { $regex: `^${toPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } 
-      }).sort({ transactionId: -1 });
-      let toNum = 1;
-      if (lastToTxn) {
-        const match = lastToTxn.transactionId.match(/-([0-9]+)$/);
-        if (match) toNum = parseInt(match[1]) + 1;
-      }
+      await inventory.save();
+      fromNum++;
+    }
+    
+    let lastToTxn = await Transaction.findOne({ 
+      transactionId: { $regex: `^${toPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } 
+    }).sort({ transactionId: -1 });
+    let toNum = 1;
+    if (lastToTxn) {
+      const match = lastToTxn.transactionId.match(/-([0-9]+)$/);
+      if (match) toNum = parseInt(match[1]) + 1;
+    }
+    
+    for (const transferItem of transfer.items) {
+      const inventory = await Inventory.findById(transferItem.item);
+      if (!inventory) continue;
       
       const issueTxn = new Transaction({
         transactionId: `${toPrefix}${String(toNum).padStart(4, '0')}`,
@@ -252,6 +259,7 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
       await issueTxn.save();
       inventory.currentStock -= transferItem.quantity;
       await inventory.save();
+      toNum++;
     }
     
     transfer.status = 'APPROVED';
