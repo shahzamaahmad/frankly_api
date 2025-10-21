@@ -56,16 +56,16 @@ router.put('/:id', authMiddleware, async (req, res) => {
       
       // Reverse old transaction effect
       if (oldTransaction.type === 'ASSIGN') {
-        asset.quantity += oldTransaction.quantity; // Add back
+        asset.currentStock += oldTransaction.quantity;
       } else if (oldTransaction.type === 'RETURN') {
-        asset.quantity -= oldTransaction.quantity; // Remove back
+        asset.currentStock -= oldTransaction.quantity;
       }
       
       // Apply new transaction effect
       if (newType === 'ASSIGN') {
-        asset.quantity -= newQuantity; // Subtract
+        asset.currentStock -= newQuantity;
       } else if (newType === 'RETURN') {
-        asset.quantity += newQuantity; // Add
+        asset.currentStock += newQuantity;
       }
       
       await asset.save();
@@ -138,9 +138,9 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     const asset = await OfficeAsset.findById(transaction.asset);
     if (asset) {
       if (transaction.type === 'ASSIGN') {
-        asset.quantity += transaction.quantity;
+        asset.currentStock += transaction.quantity;
       } else if (transaction.type === 'RETURN') {
-        asset.quantity = Math.max(0, asset.quantity - transaction.quantity);
+        asset.currentStock -= transaction.quantity;
       }
       await asset.save();
     }

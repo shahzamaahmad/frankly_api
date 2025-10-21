@@ -46,13 +46,14 @@ router.post('/', authMiddleware, checkAdmin(), upload.single('image'), async (re
       return res.status(400).json({ message: 'SKU, name, and category are required' });
     }
 
-    const assetData = { sku, name, category, subCategory, brand, model, serialNumber, quantity: parseInt(quantity) || 1, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
+    const initialStock = parseInt(quantity) || 1;
+    const assetData = { sku, name, category, subCategory, brand, model, serialNumber, initialStock, currentStock: initialStock, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
 
     // Handle initial transaction if assignedTo is provided
     if (assignedTo && transactionType) {
       const transactionQuantity = parseInt(quantity) || 1;
       if (transactionType === 'ASSIGN') {
-        assetData.quantity = Math.max(0, assetData.quantity - transactionQuantity);
+        assetData.currentStock = Math.max(0, assetData.currentStock - transactionQuantity);
       }
     }
 
@@ -101,7 +102,8 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
       return res.status(404).json({ message: 'Office asset not found' });
     }
 
-    const updateData = { sku, name, category, subCategory, brand, model, serialNumber, quantity, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
+    const updateData = { sku, name, category, subCategory, brand, model, serialNumber, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
+    if (quantity) updateData.initialStock = parseInt(quantity);
 
     if (req.file) {
       try {
@@ -116,18 +118,16 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
       }
     }
 
-    // Handle quantity changes based on transaction type (only if transactionType is provided)
+    // Handle stock changes based on transaction type
     if (req.body.transactionType) {
       const transactionType = req.body.transactionType;
       const transactionQuantity = parseInt(req.body.quantity) || 1;
       
       if (transactionType === 'ASSIGN') {
-        updateData.quantity = Math.max(0, currentAsset.quantity - transactionQuantity);
+        updateData.currentStock = Math.max(0, currentAsset.currentStock - transactionQuantity);
       } else if (transactionType === 'RETURN') {
-        updateData.quantity = currentAsset.quantity + transactionQuantity;
+        updateData.currentStock = currentAsset.currentStock + transactionQuantity;
       }
-    } else {
-      updateData.quantity = parseInt(quantity) || currentAsset.quantity;
     }
 
     // Only create transaction if transactionType is provided
