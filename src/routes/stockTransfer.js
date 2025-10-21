@@ -3,6 +3,7 @@ const router = express.Router();
 const StockTransfer = require('../models/stockTransfer');
 const Inventory = require('../models/inventory');
 const Transaction = require('../models/transaction');
+const Log = require('../models/log');
 const { authMiddleware } = require('../middlewares/auth');
 
 router.post('/', authMiddleware, async (req, res) => {
@@ -177,6 +178,13 @@ router.post('/request', authMiddleware, async (req, res) => {
     });
     await transfer.save();
     
+    await Log.create({
+      userId: req.user._id,
+      action: 'CREATE_STOCK_TRANSFER',
+      details: `Created stock transfer request ${transferId}`,
+      timestamp: new Date()
+    });
+    
     res.status(201).json({ message: 'Transfer request created', transfer });
   } catch (error) {
     console.error('Create transfer request error:', error);
@@ -269,6 +277,13 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
     transfer.approvedBy = req.user._id;
     transfer.approvalDate = now;
     await transfer.save();
+    
+    await Log.create({
+      userId: req.user._id,
+      action: 'APPROVE_STOCK_TRANSFER',
+      details: `Approved stock transfer ${transfer.transferId}`,
+      timestamp: new Date()
+    });
     
     global.io?.emit('transaction:created');
     global.io?.emit('inventory:updated');
