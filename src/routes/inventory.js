@@ -76,9 +76,12 @@ router.post('/', checkAdmin(), (req, res, next) => {
   try {
     const data = req.body;
     
-    if (!data.itemName || !data.sku || !data.category) {
+    const itemName = data.itemName || data.name;
+    if (!itemName || !data.sku || !data.category) {
       return res.status(400).json({ error: 'Item name, SKU, and category are required' });
     }
+    data.name = itemName;
+    delete data.itemName;
     
     if (data.currentStock !== undefined && data.currentStock < 0) {
       return res.status(400).json({ error: 'Stock cannot be negative' });
