@@ -20,7 +20,7 @@ router.post('/', authMiddleware, async (req, res) => {
       quantity,
       notes,
       reason,
-      requestedBy: req.user.userId,
+      requestedBy: req.user._id,
       status: 'PENDING'
     });
     await transfer.save();
@@ -86,7 +86,7 @@ router.put('/:id/approve', authMiddleware, async (req, res) => {
     await txn.save();
     
     transfer.status = 'IN_TRANSIT';
-    transfer.approvedBy = req.user.userId;
+    transfer.approvedBy = req.user._id;
     transfer.approvalDate = new Date();
     transfer.transferDate = new Date();
     await transfer.save();
@@ -110,15 +110,15 @@ router.put('/:id/receive', authMiddleware, async (req, res) => {
       type: 'RETURN',
       item: transfer.item,
       site: transfer.toSite,
-      employee: req.user.userId,
+      employee: req.user._id,
       quantity: transfer.quantity,
       timestamp: new Date(),
-      returnee: req.user.fullName || req.user.username
+      returnee: `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.username
     });
     await txn.save();
     
     transfer.status = 'RECEIVED';
-    transfer.receivedBy = req.user.userId;
+    transfer.receivedBy = req.user._id;
     transfer.receiveDate = new Date();
     await transfer.save();
     
