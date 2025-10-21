@@ -45,16 +45,35 @@ router.post('/', authMiddleware, async (req, res) => {
 
 router.get('/:siteId/items', authMiddleware, async (req, res) => {
   try {
-    const transactions = await Transaction.find({ site: req.params.siteId, type: 'ISSUE' })
-      .populate('item', 'name sku currentStock')
-      .select('item quantity');
-    const itemMap = {};
+    const transactions = await Transaction.find({ site: req.params.siteId })
+      .populate('item', 'name sku')
+      .select('item quantity type');
+    
+    const itemStock = {};
     transactions.forEach(t => {
       if (t.item) {
-        itemMap[t.item._id] = t.item;
+        const itemId = t.item._id.toString();
+        if (!itemStock[itemId]) {
+          itemStock[itemId] = { item: t.item, stock: 0 };
+        }
+        if (t.type === 'ISSUE') {
+          itemStock[itemId].stock += t.quantity;
+        } else if (t.type === 'RETURN') {
+          itemStock[itemId].stock -= t.quantity;
+        }
       }
     });
-    res.json(Object.values(itemMap));
+    
+    const result = Object.values(itemStock)
+      .filter(i => i.stock > 0)
+      .map(i => ({
+        _id: i.item._id,
+        name: i.item.name,
+        sku: i.item.sku,
+        currentStock: i.stock
+      }));
+    
+    res.json(result);
   } catch (error) {
     console.error('Fetch site items error:', error);
     res.status(500).json({ message: 'Server error' });
