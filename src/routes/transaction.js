@@ -113,6 +113,10 @@ router.put('/:id', authMiddleware, checkAdmin(), async (req, res) => {
 
     const { type, employee, site, item, quantity, returnDetails, relatedTo } = req.body;
     
+    if (type && type !== transaction.type) {
+      return res.status(400).json({ error: 'Cannot change transaction type' });
+    }
+    
     if (!type || !site || !item || !quantity || quantity <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
     }

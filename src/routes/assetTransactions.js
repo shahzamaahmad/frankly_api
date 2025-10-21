@@ -47,6 +47,10 @@ router.put('/:id', authMiddleware, async (req, res) => {
       return res.status(404).json({ message: 'Asset transaction not found' });
     }
 
+    if (req.body.type && req.body.type !== oldTransaction.type) {
+      return res.status(400).json({ message: 'Cannot change transaction type' });
+    }
+
     const OfficeAsset = require('../models/officeAsset');
     
     const OfficeAsset = require('../models/officeAsset');
