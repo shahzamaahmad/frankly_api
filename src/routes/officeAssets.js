@@ -103,7 +103,7 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
     }
 
     const updateData = { sku, name, category, subCategory, brand, model, serialNumber, purchaseDate, purchasePrice, currentValue, condition, location, assignedTo, status, description };
-    if (quantity) updateData.initialStock = parseInt(quantity);
+    if (quantity && !req.body.transactionType) updateData.initialStock = parseInt(quantity);
 
     if (req.file) {
       try {
