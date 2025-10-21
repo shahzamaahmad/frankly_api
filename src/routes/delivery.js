@@ -95,6 +95,7 @@ router.post('/', checkAdmin(), (req, res, next) => {
     await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${body.deliveryNumber || d._id}`);
     if (global.io) {
       global.io.emit('delivery:created', d);
+      global.io.emit('inventory:updated');
     }
     res.status(201).json(d);
   } catch (err) {
@@ -179,6 +180,7 @@ router.put('/:id', checkAdmin(), (req, res, next) => {
     await createLog('EDIT_DELIVERY', req.user.id, req.user.username, `Edited delivery: ${req.params.id}`);
     if (global.io) {
       global.io.emit('delivery:updated', updated);
+      global.io.emit('inventory:updated');
     }
     res.json(updated);
   } catch (err) {
@@ -208,6 +210,7 @@ router.delete('/:id', checkAdmin(), async (req, res) => {
     await createLog('DELETE_DELIVERY', req.user.id, req.user.username, `Deleted delivery: ${req.params.id}`);
     if (global.io) {
       global.io.emit('delivery:deleted', { id: req.params.id });
+      global.io.emit('inventory:updated');
     }
     res.json({ message: 'Deleted' });
   } catch (err) {
