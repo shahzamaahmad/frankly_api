@@ -97,6 +97,7 @@ router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
     await createLog('ADD_TRANSACTION', req.user.id, req.user.username, `Added ${type} transaction: ${transactionId}`);
     if (global.io) {
       global.io.emit('transaction:created', populated);
+      global.io.emit('inventory:updated');
     }
     res.status(201).json(populated);
   } catch (err) {
@@ -156,6 +157,7 @@ router.put('/:id', authMiddleware, checkAdmin(), async (req, res) => {
     await createLog('EDIT_TRANSACTION', req.user.id, req.user.username, `Edited transaction: ${transaction.transactionId}`);
     if (global.io) {
       global.io.emit('transaction:updated', populated);
+      global.io.emit('inventory:updated');
     }
     res.json(populated);
   } catch (err) {
@@ -184,6 +186,7 @@ router.delete('/:id', authMiddleware, checkAdmin(), async (req, res) => {
     await Transaction.findByIdAndDelete(req.params.id);
     if (global.io) {
       global.io.emit('transaction:deleted', { id: req.params.id });
+      global.io.emit('inventory:updated');
     }
     res.json({ message: 'Transaction deleted' });
   } catch (err) {
