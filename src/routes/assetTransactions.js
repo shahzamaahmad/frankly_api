@@ -42,18 +42,45 @@ router.put('/:id', authMiddleware, async (req, res) => {
       return res.status(403).json({ message: 'Admin access required' });
     }
 
+    const oldTransaction = await AssetTransaction.findById(req.params.id);
+    if (!oldTransaction) {
+      return res.status(404).json({ message: 'Asset transaction not found' });
+    }
+
+    const OfficeAsset = require('../models/officeAsset');
+    const asset = await OfficeAsset.findById(oldTransaction.asset);
+    
+    if (asset) {
+      // Reverse old transaction
+      if (oldTransaction.type === 'ASSIGN') {
+        asset.quantity += oldTransaction.quantity;
+      } else if (oldTransaction.type === 'RETURN') {
+        asset.quantity -= oldTransaction.quantity;
+      }
+      
+      // Apply new transaction
+      const newType = req.body.type || oldTransaction.type;
+      const newQuantity = req.body.quantity || oldTransaction.quantity;
+      if (newType === 'ASSIGN') {
+        asset.quantity -= newQuantity;
+      } else if (newType === 'RETURN') {
+        asset.quantity += newQuantity;
+      }
+      
+      await asset.save();
+    }
+
     const transaction = await AssetTransaction.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true }
     );
-    
-    if (!transaction) {
-      return res.status(404).json({ message: 'Asset transaction not found' });
-    }
 
     const io = req.app.get('io');
-    if (io) io.emit('assetTransaction:updated', transaction);
+    if (io) {
+      io.emit('assetTransaction:updated', transaction);
+      if (asset) io.emit('officeAsset:updated', asset);
+    }
 
     res.json(transaction);
   } catch (err) {
