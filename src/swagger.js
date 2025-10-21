@@ -154,7 +154,7 @@ All endpoints (except /auth) require JWT Bearer token in Authorization header.
       { name: '⚙️ Config', description: 'App configuration' },
     ],
   },
-  apis: ['./src/routes/*.js'],
+  apis: ['./src/routes/*.js', './src/server.js'],
 };
 
 module.exports = swaggerJsdoc(options);
