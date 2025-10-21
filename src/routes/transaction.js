@@ -185,8 +185,11 @@ router.delete('/:id', authMiddleware, checkAdmin(), async (req, res) => {
     
     await Transaction.findByIdAndDelete(req.params.id);
     if (global.io) {
+      console.log('Emitting socket events: transaction:deleted, inventory:updated');
       global.io.emit('transaction:deleted', { id: req.params.id });
       global.io.emit('inventory:updated');
+    } else {
+      console.log('WARNING: global.io is not available');
     }
     res.json({ message: 'Transaction deleted' });
   } catch (err) {
