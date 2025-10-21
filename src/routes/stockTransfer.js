@@ -85,6 +85,36 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
+router.get('/history', authMiddleware, async (req, res) => {
+  try {
+    const transfers = await Transaction.find({ remark: { $regex: '^Stock Transfer:' } })
+      .populate('employee', 'firstName lastName username')
+      .populate('site', 'siteName siteCode')
+      .populate('item', 'name sku')
+      .sort({ timestamp: -1 })
+      .limit(50);
+    res.json(transfers);
+  } catch (error) {
+    console.error('Fetch transfer history error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/pending', authMiddleware, async (req, res) => {
+  try {
+    const pending = await StockTransfer.find({ status: 'PENDING' })
+      .populate('items.item', 'name sku')
+      .populate('fromSite', 'siteName siteCode')
+      .populate('toSite', 'siteName siteCode')
+      .populate('employee', 'firstName lastName username')
+      .sort({ requestDate: -1 });
+    res.json(pending);
+  } catch (error) {
+    console.error('Fetch pending transfers error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 router.get('/:siteId/items', authMiddleware, async (req, res) => {
   try {
     const transactions = await Transaction.find({ site: req.params.siteId })
@@ -122,21 +152,6 @@ router.get('/:siteId/items', authMiddleware, async (req, res) => {
   }
 });
 
-router.get('/history', authMiddleware, async (req, res) => {
-  try {
-    const transfers = await Transaction.find({ remark: { $regex: '^Stock Transfer:' } })
-      .populate('employee', 'firstName lastName username')
-      .populate('site', 'siteName siteCode')
-      .populate('item', 'name sku')
-      .sort({ timestamp: -1 })
-      .limit(50);
-    res.json(transfers);
-  } catch (error) {
-    console.error('Fetch transfer history error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
 router.post('/request', authMiddleware, async (req, res) => {
   try {
     const { items, fromSite, toSite, employee, notes } = req.body;
@@ -164,21 +179,6 @@ router.post('/request', authMiddleware, async (req, res) => {
     res.status(201).json({ message: 'Transfer request created', transfer });
   } catch (error) {
     console.error('Create transfer request error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-router.get('/pending', authMiddleware, async (req, res) => {
-  try {
-    const pending = await StockTransfer.find({ status: 'PENDING' })
-      .populate('items.item', 'name sku')
-      .populate('fromSite', 'siteName siteCode')
-      .populate('toSite', 'siteName siteCode')
-      .populate('employee', 'firstName lastName username')
-      .sort({ requestDate: -1 });
-    res.json(pending);
-  } catch (error) {
-    console.error('Fetch pending transfers error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
