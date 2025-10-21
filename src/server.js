@@ -129,6 +129,45 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 4000;
 
+const http = require('http');
+const socketIo = require('socket.io');
+const jwt = require('jsonwebtoken');
+
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] }
+});
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    return next(new Error('Authentication error'));
+  }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.id;
+    next();
+  } catch (err) {
+    next(new Error('Authentication error'));
+  }
+});
+
+io.on('connection', (socket) => {
+  socket.join(`user:${socket.userId}`);
+  socket.on('disconnect', () => {});
+});
+
+global.io = io;
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
+
+server.on('error', (err) => {
+  console.error('Server error:', err);
+  process.exit(1);
+});
+
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -137,54 +176,13 @@ mongoose.connect(process.env.MONGODB_URI, {
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
 }).then(async () => {
+  console.log('✅ MongoDB connected');
   const googleSheets = require('./utils/googleSheets');
   await googleSheets.initialize();
-  
   const { startDailySync } = require('./utils/cronJobs');
   startDailySync();
-  const http = require('http');
-  const socketIo = require('socket.io');
-  const server = http.createServer(app);
-  const io = socketIo(server, {
-    cors: { origin: '*', methods: ['GET', 'POST'] }
-  });
-
-  const jwt = require('jsonwebtoken');
-
-  io.use((socket, next) => {
-    const token = socket.handshake.auth.token;
-    if (!token) {
-      return next(new Error('Authentication error'));
-    }
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.userId = decoded.id;
-      next();
-    } catch (err) {
-      next(new Error('Authentication error'));
-    }
-  });
-
-  io.on('connection', (socket) => {
-    socket.join(`user:${socket.userId}`);
-
-    socket.on('disconnect', () => {
-    });
-  });
-
-  global.io = io;
-
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-
-  server.on('error', (err) => {
-    console.error('Server error:', err);
-    process.exit(1);
-  });
 }).catch(err => {
   console.error('MongoDB connection error:', err.message);
-  process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
