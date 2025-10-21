@@ -25,29 +25,32 @@ router.post('/', authMiddleware, async (req, res) => {
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yy = String(now.getFullYear()).slice(-2);
     const dateStr = `${dd}${mm}${yy}`;
-    const fromPrefix = `TXN-${dateStr}-`;
-    const toPrefix = `TXN-${dateStr}-`;
+    
+    const fromSiteCode = fromSiteDoc?.siteCode || 'UNKNOWN';
+    const toSiteCode = toSiteDoc?.siteCode || 'UNKNOWN';
+    const fromPrefix = `TXN-${dateStr}-${fromSiteCode}-`;
+    const toPrefix = `TXN-${dateStr}-${toSiteCode}-`;
     
     const lastFromTxn = await Transaction.findOne({ 
-      transactionId: { $regex: `^${fromPrefix}.*-${fromSiteDoc?.siteCode || ''}$` } 
+      transactionId: { $regex: `^${fromPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } 
     }).sort({ transactionId: -1 });
     let fromNum = 1;
     if (lastFromTxn) {
-      const match = lastFromTxn.transactionId.match(/-(\d+)-/);
+      const match = lastFromTxn.transactionId.match(/-([0-9]+)$/);
       if (match) fromNum = parseInt(match[1]) + 1;
     }
     
     const lastToTxn = await Transaction.findOne({ 
-      transactionId: { $regex: `^${toPrefix}.*-${toSiteDoc?.siteCode || ''}$` } 
+      transactionId: { $regex: `^${toPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } 
     }).sort({ transactionId: -1 });
     let toNum = 1;
     if (lastToTxn) {
-      const match = lastToTxn.transactionId.match(/-(\d+)-/);
+      const match = lastToTxn.transactionId.match(/-([0-9]+)$/);
       if (match) toNum = parseInt(match[1]) + 1;
     }
     
     const returnTxn = new Transaction({
-      transactionId: `${fromPrefix}${String(fromNum).padStart(4, '0')}-${fromSiteDoc?.siteCode || 'UNKNOWN'}`,
+      transactionId: `${fromPrefix}${String(fromNum).padStart(4, '0')}`,
       type: 'RETURN',
       item,
       site: fromSite,
@@ -60,7 +63,7 @@ router.post('/', authMiddleware, async (req, res) => {
     inventory.currentStock += quantity;
     
     const issueTxn = new Transaction({
-      transactionId: `${toPrefix}${String(toNum).padStart(4, '0')}-${toSiteDoc?.siteCode || 'UNKNOWN'}`,
+      transactionId: `${toPrefix}${String(toNum).padStart(4, '0')}`,
       type: 'ISSUE',
       item,
       site: toSite,
@@ -115,6 +118,21 @@ router.get('/:siteId/items', authMiddleware, async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Fetch site items error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/history', authMiddleware, async (req, res) => {
+  try {
+    const transfers = await Transaction.find({ remark: { $regex: '^Stock Transfer:' } })
+      .populate('employee', 'firstName lastName username')
+      .populate('site', 'siteName siteCode')
+      .populate('item', 'name sku')
+      .sort({ timestamp: -1 })
+      .limit(50);
+    res.json(transfers);
+  } catch (error) {
+    console.error('Fetch transfer history error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
