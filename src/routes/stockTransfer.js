@@ -12,34 +12,66 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Missing required fields' });
     }
     
-    const [fromSiteDoc, toSiteDoc] = await Promise.all([
-      require('../models/site').findById(fromSite).select('siteName'),
-      require('../models/site').findById(toSite).select('siteName')
+    const [fromSiteDoc, toSiteDoc, inventory] = await Promise.all([
+      require('../models/site').findById(fromSite).select('siteName siteCode'),
+      require('../models/site').findById(toSite).select('siteName siteCode'),
+      Inventory.findById(item)
     ]);
     
+    if (!inventory) return res.status(404).json({ message: 'Item not found' });
+    
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yy = String(now.getFullYear()).slice(-2);
+    const dateStr = `${dd}${mm}${yy}`;
+    const fromPrefix = `TXN-${dateStr}-`;
+    const toPrefix = `TXN-${dateStr}-`;
+    
+    const lastFromTxn = await Transaction.findOne({ 
+      transactionId: { $regex: `^${fromPrefix}.*-${fromSiteDoc?.siteCode || ''}$` } 
+    }).sort({ transactionId: -1 });
+    let fromNum = 1;
+    if (lastFromTxn) {
+      const match = lastFromTxn.transactionId.match(/-(\d+)-/);
+      if (match) fromNum = parseInt(match[1]) + 1;
+    }
+    
+    const lastToTxn = await Transaction.findOne({ 
+      transactionId: { $regex: `^${toPrefix}.*-${toSiteDoc?.siteCode || ''}$` } 
+    }).sort({ transactionId: -1 });
+    let toNum = 1;
+    if (lastToTxn) {
+      const match = lastToTxn.transactionId.match(/-(\d+)-/);
+      if (match) toNum = parseInt(match[1]) + 1;
+    }
+    
     const returnTxn = new Transaction({
-      transactionId: `TXN${Date.now()}`,
+      transactionId: `${fromPrefix}${String(fromNum).padStart(4, '0')}-${fromSiteDoc?.siteCode || 'UNKNOWN'}`,
       type: 'RETURN',
       item,
       site: fromSite,
       employee,
       quantity,
-      timestamp: new Date(),
-      remark: `${fromSiteDoc?.siteName || 'Unknown'} -> ${toSiteDoc?.siteName || 'Unknown'}`
+      timestamp: now,
+      remark: `Stock Transfer: ${fromSiteDoc?.siteName || 'Unknown'} → ${toSiteDoc?.siteName || 'Unknown'}`
     });
     await returnTxn.save();
+    inventory.currentStock += quantity;
     
     const issueTxn = new Transaction({
-      transactionId: `TXN${Date.now() + 1}`,
+      transactionId: `${toPrefix}${String(toNum).padStart(4, '0')}-${toSiteDoc?.siteCode || 'UNKNOWN'}`,
       type: 'ISSUE',
       item,
       site: toSite,
       employee,
       quantity,
-      timestamp: new Date(),
-      remark: `${fromSiteDoc?.siteName || 'Unknown'} -> ${toSiteDoc?.siteName || 'Unknown'}`
+      timestamp: now,
+      remark: `Stock Transfer: ${fromSiteDoc?.siteName || 'Unknown'} → ${toSiteDoc?.siteName || 'Unknown'}`
     });
     await issueTxn.save();
+    inventory.currentStock -= quantity;
+    await inventory.save();
     
     global.io?.emit('transaction:created');
     global.io?.emit('inventory:updated');
