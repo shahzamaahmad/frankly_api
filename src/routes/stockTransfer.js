@@ -107,6 +107,7 @@ router.get('/', authMiddleware, async (req, res) => {
       .populate('fromSite', 'siteName siteCode')
       .populate('toSite', 'siteName siteCode')
       .populate('employee', 'firstName lastName username')
+      .populate('approvedBy', 'firstName lastName username')
       .sort({ requestDate: -1 });
     res.json(transfers);
   } catch (error) {
