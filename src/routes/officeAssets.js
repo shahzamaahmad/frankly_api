@@ -111,8 +111,12 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
       const totalAssigned = transactions.filter(t => t.type === 'ASSIGN').reduce((sum, t) => sum + t.quantity, 0);
       const totalReturned = transactions.filter(t => t.type === 'RETURN').reduce((sum, t) => sum + t.quantity, 0);
       
+      console.log(`Asset ${req.params.id}: newInitial=${newInitialStock}, assigned=${totalAssigned}, returned=${totalReturned}`);
+      
       updateData.initialStock = newInitialStock;
-      updateData.currentStock = newInitialStock + totalReturned - totalAssigned;
+      updateData.currentStock = Math.max(0, newInitialStock + totalReturned - totalAssigned);
+      
+      console.log(`Calculated currentStock: ${updateData.currentStock}`);
     }
 
     if (req.file) {
