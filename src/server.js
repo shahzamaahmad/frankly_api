@@ -75,7 +75,16 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/api/health', (req, res) => {
+  console.log('💚 Keep-alive ping received');
+  res.json({ 
+    status: '✨ Frankly API is alive and running',
+    server: 'frankly.ae',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    message: '🚀 All systems operational'
+  });
+});
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
