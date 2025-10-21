@@ -100,6 +100,21 @@ router.get('/history', authMiddleware, async (req, res) => {
   }
 });
 
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const transfers = await StockTransfer.find()
+      .populate('items.item', 'name sku')
+      .populate('fromSite', 'siteName siteCode')
+      .populate('toSite', 'siteName siteCode')
+      .populate('employee', 'firstName lastName username')
+      .sort({ requestDate: -1 });
+    res.json(transfers);
+  } catch (error) {
+    console.error('Fetch transfers error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 router.get('/pending', authMiddleware, async (req, res) => {
   try {
     const pending = await StockTransfer.find({ status: 'PENDING' })
