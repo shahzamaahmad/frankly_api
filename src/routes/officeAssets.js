@@ -73,6 +73,7 @@ router.post('/', authMiddleware, checkAdmin(), upload.single('image'), async (re
     const Log = require('../models/log');
     await Log.create({
       userId: req.user._id,
+      username: req.user.username,
       action: 'ADD',
       details: `Added office asset: ${asset.name} (${asset.sku})`,
       timestamp: new Date()
@@ -169,6 +170,7 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
       const Log = require('../models/log');
       await Log.create({
         userId: req.user._id,
+        username: req.user.username,
         action: 'ADD',
         details: `${transactionType} office asset: ${currentAsset.name} to employee`,
         timestamp: new Date()
@@ -183,6 +185,7 @@ router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (
     const Log = require('../models/log');
     await Log.create({
       userId: req.user._id,
+      username: req.user.username,
       action: 'EDIT',
       details: `Edited office asset: ${asset.name} (${asset.sku})`,
       timestamp: new Date()
@@ -209,6 +212,7 @@ router.delete('/:id', authMiddleware, checkAdmin(), async (req, res) => {
     const Log = require('../models/log');
     await Log.create({
       userId: req.user._id,
+      username: req.user.username,
       action: 'DELETE',
       details: `Deleted office asset: ${asset.name} (${asset.sku})`,
       timestamp: new Date()
