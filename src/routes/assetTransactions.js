@@ -52,8 +52,6 @@ router.put('/:id', authMiddleware, async (req, res) => {
     }
 
     const OfficeAsset = require('../models/officeAsset');
-    
-    const OfficeAsset = require('../models/officeAsset');
     const oldAsset = await OfficeAsset.findById(oldTransaction.asset);
     if (!oldAsset) {
       return res.status(404).json({ message: 'Old asset not found' });

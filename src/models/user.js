@@ -11,7 +11,6 @@ const UserSchema = new mongoose.Schema({
 
   firstName: { type: String },
   lastName: { type: String },
-  fullName: { type: String },
   employeeId: { type: String },
   profilePictureUrl: { type: String },
   emergencyContact: { type: String },
