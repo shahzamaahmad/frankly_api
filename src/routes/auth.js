@@ -96,10 +96,10 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ message: 'Username already exists' });
     }
     const user = new User(userData);
-    if (req.body.firstName && req.body.lastName && !req.body.fullName) {
-      user.fullName = `${req.body.firstName} ${req.body.lastName}`;
-    }
     await user.save();
+
+    await createLog('ADD', user._id, user.username, `Created employee: ${user.username}`);
+
     res.status(201).json({ message: 'User created', username: user.username });
   } catch (err) {
     console.error('Signup error:', err);

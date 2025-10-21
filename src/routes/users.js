@@ -34,9 +34,6 @@ router.put('/:id', checkAdmin(), async (req, res) => {
       return res.status(400).json({ message: 'Username must be at least 3 characters' });
     }
 
-    if (updates.firstName && updates.lastName && !updates.fullName) {
-      updates.fullName = `${updates.firstName} ${updates.lastName}`;
-    }
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
@@ -48,6 +45,15 @@ router.put('/:id', checkAdmin(), async (req, res) => {
     }
     Object.assign(user, updates);
     await user.save();
+
+    const Log = require('../models/log');
+    await Log.create({
+      userId: req.user._id,
+      username: req.user.username,
+      action: 'UPDATE',
+      details: `Updated employee: ${user.username}`,
+      timestamp: new Date()
+    });
 
     if (permissionsChanged && global.io) {
       global.io.to(`user:${req.params.id}`).emit('permissionsUpdated', { permissions: user.permissions });
@@ -74,6 +80,16 @@ router.delete('/:id', checkAdmin(), async (req, res) => {
 
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const Log = require('../models/log');
+    await Log.create({
+      userId: req.user._id,
+      username: req.user.username,
+      action: 'DELETE',
+      details: `Deleted employee: ${user.username}`,
+      timestamp: new Date()
+    });
+
     res.json({ message: 'User deleted successfully' });
   } catch (err) {
     console.error('Delete user error:', err);
