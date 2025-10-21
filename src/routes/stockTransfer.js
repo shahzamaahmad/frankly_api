@@ -12,6 +12,11 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Missing required fields' });
     }
     
+    const [fromSiteDoc, toSiteDoc] = await Promise.all([
+      require('../models/site').findById(fromSite).select('siteName'),
+      require('../models/site').findById(toSite).select('siteName')
+    ]);
+    
     const returnTxn = new Transaction({
       transactionId: `TXN${Date.now()}`,
       type: 'RETURN',
@@ -19,7 +24,8 @@ router.post('/', authMiddleware, async (req, res) => {
       site: fromSite,
       employee,
       quantity,
-      timestamp: new Date()
+      timestamp: new Date(),
+      remark: `${fromSiteDoc?.siteName || 'Unknown'} -> ${toSiteDoc?.siteName || 'Unknown'}`
     });
     await returnTxn.save();
     
@@ -30,7 +36,8 @@ router.post('/', authMiddleware, async (req, res) => {
       site: toSite,
       employee,
       quantity,
-      timestamp: new Date()
+      timestamp: new Date(),
+      remark: `${fromSiteDoc?.siteName || 'Unknown'} -> ${toSiteDoc?.siteName || 'Unknown'}`
     });
     await issueTxn.save();
     
