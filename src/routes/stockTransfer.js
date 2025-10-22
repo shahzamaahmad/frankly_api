@@ -180,6 +180,7 @@ router.post('/request', authMiddleware, async (req, res) => {
     
     await Log.create({
       userId: req.user._id,
+      username: req.user.username,
       action: 'CREATE_STOCK_TRANSFER',
       details: `Created stock transfer request ${transferId}`,
       timestamp: new Date()
@@ -280,6 +281,7 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
     
     await Log.create({
       userId: req.user._id,
+      username: req.user.username,
       action: 'APPROVE_STOCK_TRANSFER',
       details: `Approved stock transfer ${transfer.transferId}`,
       timestamp: new Date()
