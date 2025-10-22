@@ -38,11 +38,6 @@ const transactionSchema = new mongoose.Schema({
     type: String
   },
   returnDetails: {
-    condition: {
-      type: String,
-      enum: ['Good', 'Damaged', 'Lost'],
-      default: 'Good'
-    },
     notes: String
   },
   relatedTo: {

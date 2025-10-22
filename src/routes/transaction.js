@@ -14,7 +14,7 @@ router.get('/', authMiddleware, checkPermission(), async (req, res) => {
     const filter = {};
     if (site && typeof site === 'string') filter.site = site;
     if (item && typeof item === 'string') filter.item = item;
-    
+
     const transactions = await Transaction.find(filter)
       .populate('employee', 'firstName lastName username email')
       .populate('site', 'siteName siteCode')
@@ -43,12 +43,12 @@ router.get('/:id', authMiddleware, checkPermission(), async (req, res) => {
 
 router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
   try {
-    const { type, employee, site, item, quantity, returnDetails, relatedTo, timestamp } = req.body;
-    
+    const { type, employee, site, item, quantity, timestamp } = req.body;
+
     if (!type || !site || !item || !quantity || quantity <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
     }
-    
+
     const inventory = await Inventory.findById(item);
     if (!inventory) return res.status(404).json({ error: 'Item not found' });
 
@@ -83,8 +83,6 @@ router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
       site,
       item,
       quantity,
-      returnDetails,
-      relatedTo,
       timestamp: now
     });
 
@@ -93,7 +91,7 @@ router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
       .populate('employee', 'firstName lastName username email')
       .populate('site', 'siteName siteCode')
       .populate('item', 'name sku');
-    
+
     await createLog('ADD_TRANSACTION', req.user.id, req.user.username, `Added ${type} transaction: ${transactionId}`);
     if (global.io) {
       global.io.emit('transaction:created', populated);
@@ -111,12 +109,12 @@ router.put('/:id', authMiddleware, checkPermission('editTransaction'), async (re
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
-    const { type, employee, site, item, quantity, returnDetails, relatedTo } = req.body;
-    
+    const { type, employee, site, item, quantity, remark } = req.body;
+
     if (type && type !== transaction.type) {
       return res.status(400).json({ error: 'Cannot change transaction type' });
     }
-    
+
     if (!type || !site || !item || !quantity || quantity <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
     }
@@ -149,15 +147,14 @@ router.put('/:id', authMiddleware, checkPermission('editTransaction'), async (re
     transaction.site = site;
     transaction.item = item;
     transaction.quantity = quantity;
-    transaction.returnDetails = returnDetails;
-    transaction.relatedTo = relatedTo;
+    transaction.remark = remark;
 
     await transaction.save();
     const populated = await Transaction.findById(transaction._id)
       .populate('employee', 'firstName lastName username email')
       .populate('site', 'siteName siteCode')
       .populate('item', 'name sku');
-    
+
     await createLog('EDIT_TRANSACTION', req.user.id, req.user.username, `Edited transaction: ${transaction.transactionId}`);
     if (global.io) {
       global.io.emit('transaction:updated', populated);
@@ -186,7 +183,7 @@ router.delete('/:id', authMiddleware, checkAdmin(), async (req, res) => {
     }
 
     await createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`);
-    
+
     await Transaction.findByIdAndDelete(req.params.id);
     if (global.io) {
       console.log('Emitting socket events: transaction:deleted, inventory:updated');
