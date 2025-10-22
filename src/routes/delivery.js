@@ -57,8 +57,8 @@ router.post('/', checkAdmin(), (req, res, next) => {
     const now = getDubaiTime();
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const yyyy = now.getFullYear();
-    const dateStr = `${dd}${mm}${yyyy}`;
+    const yy = String(now.getFullYear()).slice(-2);
+    const dateStr = `${dd}${mm}${yy}`;
     const todayPrefix = `DEL-${dateStr}-`;
     const lastDelivery = await Delivery.findOne({ deliveryId: { $regex: `^${todayPrefix}` } }).sort({ deliveryId: -1 });
     let nextNum = 1;
@@ -66,7 +66,7 @@ router.post('/', checkAdmin(), (req, res, next) => {
       const match = lastDelivery.deliveryId.match(/-(\d+)$/);
       if (match) nextNum = parseInt(match[1]) + 1;
     }
-    body.deliveryId = `${todayPrefix}${String(nextNum).padStart(4, '0')}`;
+    body.deliveryId = `${todayPrefix}${String(nextNum).padStart(2, '0')}`;
     
     if (body.items && Array.isArray(body.items)) {
       for (const item of body.items) {

@@ -51,7 +51,7 @@ router.post('/', authMiddleware, async (req, res) => {
     }
     
     const returnTxn = new Transaction({
-      transactionId: `${fromPrefix}${String(fromNum).padStart(4, '0')}`,
+      transactionId: `${fromPrefix}${String(fromNum).padStart(2, '0')}`,
       type: 'RETURN',
       item,
       site: fromSite,
@@ -64,7 +64,7 @@ router.post('/', authMiddleware, async (req, res) => {
     inventory.currentStock += quantity;
     
     const issueTxn = new Transaction({
-      transactionId: `${toPrefix}${String(toNum).padStart(4, '0')}`,
+      transactionId: `${toPrefix}${String(toNum).padStart(2, '0')}`,
       type: 'ISSUE',
       item,
       site: toSite,
@@ -192,7 +192,7 @@ router.post('/request', authMiddleware, async (req, res) => {
       if (!inventory) continue;
       
       const returnTxn = new Transaction({
-        transactionId: `${fromPrefix}${String(fromNum).padStart(4, '0')}`,
+        transactionId: `${fromPrefix}${String(fromNum).padStart(2, '0')}`,
         type: 'RETURN',
         item: transferItem.item,
         site: fromSite,
@@ -224,7 +224,7 @@ router.post('/request', authMiddleware, async (req, res) => {
       if (!inventory) continue;
       
       const issueTxn = new Transaction({
-        transactionId: `${toPrefix}${String(toNum).padStart(4, '0')}`,
+        transactionId: `${toPrefix}${String(toNum).padStart(2, '0')}`,
         type: 'ISSUE',
         item: transferItem.item,
         site: toSite,
@@ -325,7 +325,7 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
       if (!inventory) continue;
       
       const returnTxn = new Transaction({
-        transactionId: `${fromPrefix}${String(fromNum).padStart(4, '0')}`,
+        transactionId: `${fromPrefix}${String(fromNum).padStart(2, '0')}`,
         type: 'RETURN',
         item: transferItem.item,
         site: transfer.fromSite._id,
@@ -357,7 +357,7 @@ router.post('/:id/approve', authMiddleware, async (req, res) => {
       if (!inventory) continue;
       
       const issueTxn = new Transaction({
-        transactionId: `${toPrefix}${String(toNum).padStart(4, '0')}`,
+        transactionId: `${toPrefix}${String(toNum).padStart(2, '0')}`,
         type: 'ISSUE',
         item: transferItem.item,
         site: transfer.toSite._id,

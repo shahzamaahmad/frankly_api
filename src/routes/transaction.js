@@ -55,8 +55,8 @@ router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
     const now = timestamp ? new Date(timestamp) : getDubaiTime();
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const yyyy = now.getFullYear();
-    const dateStr = `${dd}${mm}${yyyy}`;
+    const yy = String(now.getFullYear()).slice(-2);
+    const dateStr = `${dd}${mm}${yy}`;
     const todayPrefix = `TXN-${dateStr}-`;
     const lastTransaction = await Transaction.findOne({ transactionId: { $regex: `^${todayPrefix}` } }).sort({ transactionId: -1 });
     let nextNum = 1;
@@ -64,7 +64,7 @@ router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
       const match = lastTransaction.transactionId.match(/-(\d+)$/);
       if (match) nextNum = parseInt(match[1]) + 1;
     }
-    const transactionId = `${todayPrefix}${String(nextNum).padStart(4, '0')}`;
+    const transactionId = `${todayPrefix}${String(nextNum).padStart(2, '0')}`;
 
     if (type === 'ISSUE') {
       if (inventory.currentStock < quantity) {
