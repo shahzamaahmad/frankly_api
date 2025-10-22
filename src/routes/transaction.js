@@ -106,7 +106,7 @@ router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
   }
 });
 
-router.put('/:id', authMiddleware, checkAdmin(), async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('editTransaction'), async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
