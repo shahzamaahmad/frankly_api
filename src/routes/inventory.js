@@ -104,6 +104,9 @@ router.post('/', checkAdmin(), (req, res, next) => {
       if (req.file) data.imageUrl = req.file.buffer.toString('base64');
       else if (data.imageBase64) data.imageUrl = data.imageBase64;
     }
+    if (!data.currentStock && data.initialStock) {
+      data.currentStock = data.initialStock;
+    }
     const inv = new Inventory(data);
     await inv.save();
     createLog('ADD_INVENTORY', req.user.id, req.user.username, `Added item: ${inv.itemName}`).catch(e => console.error('Log failed:', e));
