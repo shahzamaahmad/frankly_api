@@ -60,7 +60,9 @@ router.put('/:id', checkAdmin(), async (req, res) => {
     }
 
     if (global.io) {
-      global.io.emit('user:updated', { id: req.params.id });
+      const userWithoutPassword = user.toObject();
+      delete userWithoutPassword.password;
+      global.io.emit('user:updated', userWithoutPassword);
     }
 
     const userObj = user.toObject();
@@ -89,6 +91,10 @@ router.delete('/:id', checkAdmin(), async (req, res) => {
       details: `Deleted employee: ${user.username}`,
       timestamp: new Date()
     });
+
+    if (global.io) {
+      global.io.emit('user:deleted', { id: req.params.id });
+    }
 
     res.json({ message: 'User deleted successfully' });
   } catch (err) {

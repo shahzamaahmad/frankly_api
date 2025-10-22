@@ -80,6 +80,10 @@ router.post('/', authMiddleware, checkAdmin(), upload.single('image'), async (re
       timestamp: new Date()
     });
     
+    if (global.io) {
+      global.io.emit('officeAsset:created', asset);
+    }
+    
     console.log('Asset saved with imageUrl:', asset.imageUrl);
     res.status(201).json(asset);
   } catch (err) {
@@ -234,6 +238,10 @@ router.delete('/:id', authMiddleware, checkAdmin(), async (req, res) => {
       details: `Deleted office asset: ${asset.name} (${asset.sku})`,
       timestamp: new Date()
     });
+    
+    if (global.io) {
+      global.io.emit('officeAsset:deleted', { id: req.params.id });
+    }
     
     res.json({ message: 'Office asset deleted successfully' });
   } catch (err) {
