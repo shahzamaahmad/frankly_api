@@ -193,6 +193,28 @@ router.post('/request', authMiddleware, async (req, res) => {
   }
 });
 
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const transfer = await StockTransfer.findById(req.params.id);
+    if (!transfer) return res.status(404).json({ message: 'Transfer not found' });
+    
+    await StockTransfer.findByIdAndDelete(req.params.id);
+    
+    await Log.create({
+      userId: req.user._id,
+      username: req.user.username,
+      action: 'DELETE_STOCK_TRANSFER',
+      details: `Deleted stock transfer ${transfer.transferId}`,
+      timestamp: new Date()
+    });
+    
+    res.json({ message: 'Transfer deleted successfully' });
+  } catch (error) {
+    console.error('Delete transfer error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 router.post('/:id/approve', authMiddleware, async (req, res) => {
   try {
     const transfer = await StockTransfer.findById(req.params.id)
