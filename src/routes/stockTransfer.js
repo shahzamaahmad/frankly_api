@@ -161,11 +161,83 @@ router.post('/request', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Missing required fields' });
     }
     
+    const [fromSiteDoc, toSiteDoc] = await Promise.all([
+      require('../models/site').findById(fromSite).select('siteName siteCode'),
+      require('../models/site').findById(toSite).select('siteName siteCode')
+    ]);
+    
     const now = new Date();
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yy = String(now.getFullYear()).slice(-2);
+    const dateStr = `${dd}${mm}${yy}`;
     const transferId = `STR-${dd}${mm}${yy}-${Date.now().toString().slice(-4)}`;
+    
+    const fromSiteCode = fromSiteDoc?.siteCode || 'UNKNOWN';
+    const toSiteCode = toSiteDoc?.siteCode || 'UNKNOWN';
+    const fromPrefix = `TXN-${dateStr}-${fromSiteCode}-`;
+    const toPrefix = `TXN-${dateStr}-${toSiteCode}-`;
+    
+    let lastFromTxn = await Transaction.findOne({ 
+      transactionId: { $regex: `^${fromPrefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}` } 
+    }).sort({ transactionId: -1 });
+    let fromNum = 1;
+    if (lastFromTxn) {
+      const match = lastFromTxn.transactionId.match(/-([0-9]+)$/);
+      if (match) fromNum = parseInt(match[1]) + 1;
+    }
+    
+    for (const transferItem of items) {
+      const inventory = await Inventory.findById(transferItem.item);
+      if (!inventory) continue;
+      
+      const returnTxn = new Transaction({
+        transactionId: `${fromPrefix}${String(fromNum).padStart(4, '0')}`,
+        type: 'RETURN',
+        item: transferItem.item,
+        site: fromSite,
+        employee,
+        quantity: transferItem.quantity,
+        timestamp: now,
+        remark: `Stock Transfer: ${fromSiteDoc?.siteName || 'Unknown'} → ${toSiteDoc?.siteName || 'Unknown'}`
+      });
+      await returnTxn.save();
+      inventory.currentStock += transferItem.quantity;
+      await inventory.save();
+      fromNum++;
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const issueTime = new Date();
+    
+    let lastToTxn = await Transaction.findOne({ 
+      transactionId: { $regex: `^${toPrefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}` } 
+    }).sort({ transactionId: -1 });
+    let toNum = 1;
+    if (lastToTxn) {
+      const match = lastToTxn.transactionId.match(/-([0-9]+)$/);
+      if (match) toNum = parseInt(match[1]) + 1;
+    }
+    
+    for (const transferItem of items) {
+      const inventory = await Inventory.findById(transferItem.item);
+      if (!inventory) continue;
+      
+      const issueTxn = new Transaction({
+        transactionId: `${toPrefix}${String(toNum).padStart(4, '0')}`,
+        type: 'ISSUE',
+        item: transferItem.item,
+        site: toSite,
+        employee,
+        quantity: transferItem.quantity,
+        timestamp: issueTime,
+        remark: `Stock Transfer: ${fromSiteDoc?.siteName || 'Unknown'} → ${toSiteDoc?.siteName || 'Unknown'}`
+      });
+      await issueTxn.save();
+      inventory.currentStock -= transferItem.quantity;
+      await inventory.save();
+      toNum++;
+    }
     
     const transfer = new StockTransfer({
       transferId,
@@ -174,7 +246,9 @@ router.post('/request', authMiddleware, async (req, res) => {
       toSite,
       employee,
       notes,
-      status: 'PENDING'
+      status: 'APPROVED',
+      approvedBy: req.user._id,
+      approvalDate: now
     });
     await transfer.save();
     
@@ -182,11 +256,13 @@ router.post('/request', authMiddleware, async (req, res) => {
       userId: req.user._id,
       username: req.user.username,
       action: 'CREATE_STOCK_TRANSFER',
-      details: `Created stock transfer request ${transferId}`,
+      details: `Created and executed stock transfer ${transferId}`,
       timestamp: new Date()
     });
     
-    res.status(201).json({ message: 'Transfer request created', transfer });
+    global.io?.emit('transaction:created');
+    global.io?.emit('inventory:updated');
+    res.status(201).json({ message: 'Transfer completed', transfer });
   } catch (error) {
     console.error('Create transfer request error:', error);
     res.status(500).json({ message: 'Server error' });
