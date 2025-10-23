@@ -12,5 +12,5 @@
       "dest": "/src/server.js"
     }
   ],
-  "installCommand": "cd api && npm install"
+  "installCommand": "npm install"
 }
