@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Notification = require('../models/notification');
 const { authMiddleware } = require('../middlewares/auth');
-const checkPermission = require('../middlewares/checkPermission');
+const { checkPermission, checkAdmin } = require('../middlewares/checkPermission');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 
@@ -19,7 +19,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // Create notification
-router.post('/', authMiddleware, checkPermission('onesignalSendButton'), upload.single('image'), async (req, res) => {
+router.post('/', authMiddleware, checkAdmin(), upload.single('image'), async (req, res) => {
   try {
     const { title, subtitle, message, linkType, linkId } = req.body;
     let imageUrl = null;
@@ -54,7 +54,7 @@ router.post('/', authMiddleware, checkPermission('onesignalSendButton'), upload.
 });
 
 // Update notification
-router.put('/:id', authMiddleware, checkPermission('onesignalSendButton'), upload.single('image'), async (req, res) => {
+router.put('/:id', authMiddleware, checkAdmin(), upload.single('image'), async (req, res) => {
   try {
     const { title, subtitle, message, linkType, linkId } = req.body;
     const notification = await Notification.findById(req.params.id);
@@ -87,7 +87,7 @@ router.put('/:id', authMiddleware, checkPermission('onesignalSendButton'), uploa
 });
 
 // Delete notification
-router.delete('/:id', authMiddleware, checkPermission('onesignalSendButton'), async (req, res) => {
+router.delete('/:id', authMiddleware, checkAdmin(), async (req, res) => {
   try {
     const notification = await Notification.findByIdAndDelete(req.params.id);
     if (!notification) return res.status(404).json({ message: 'Notification not found' });
@@ -98,7 +98,7 @@ router.delete('/:id', authMiddleware, checkPermission('onesignalSendButton'), as
 });
 
 // Send notification
-router.post('/:id/send', authMiddleware, checkPermission('onesignalSendButton'), async (req, res) => {
+router.post('/:id/send', authMiddleware, checkAdmin(), async (req, res) => {
   try {
     const notification = await Notification.findById(req.params.id);
     if (!notification) return res.status(404).json({ message: 'Notification not found' });

@@ -1,76 +1,350 @@
-# API Endpoints (Dictionary)
+# ✨ Frankly Warehouse Management API
 
-All endpoints are prefixed with `/api` and most require Authorization header: `Authorization: Bearer <token>` (except `/api/auth/*`).
+RESTful API for Frankly Built Contracting LLC warehouse management system built with Node.js, Express, and MongoDB.
 
-## Auth
+## 🚀 Features
 
-- POST /api/auth/signup
-  - Body: { name, username, password, role?, email?, mobile? }
-  - Creates a user.
-- POST /api/auth/login
-  - Body: { username, password }
-  - Returns: { token, user }
+- **Authentication**: JWT-based authentication with role-based access control
+- **Inventory Management**: Track items, stock levels, barcodes, and images
+- **Transactions**: Issue and return items to construction sites
+- **Stock Transfers**: Transfer items between sites with approval workflow
+- **Deliveries**: Record supplier deliveries with invoice uploads
+- **Site Management**: Manage construction sites and track site inventory
+- **Employee Management**: User roles, permissions, and profiles
+- **Attendance**: GPS-enabled check-in/check-out with working hours tracking
+- **Office Assets**: Track company assets and assignments
+- **Google Sheets Integration**: Auto-sync data daily at 2 AM
+- **Real-time Updates**: Socket.io for live data synchronization
+- **Push Notifications**: OneSignal integration for mobile notifications
 
-## Inventory
+## 📋 Prerequisites
 
-- POST /api/inventory
-  - Form-data or JSON. fields: sku, itemName, type, origin, initialStock, currentStock, uom, size, remark
-  - Optionally upload `image` file (multipart/form-data) OR send `imageBase64` and `imageContentType` in JSON.
-- GET /api/inventory
-  - Query params: ?type=... & ?origin=...
-- GET /api/inventory/:id
-- PUT /api/inventory/:id
-- PATCH /api/inventory/:id
-- DELETE /api/inventory/:id
+- Node.js 16.x or higher
+- MongoDB 5.0 or higher
+- Cloudinary account (for image storage)
+- Google Sheets API credentials (optional)
+- OneSignal account (optional, for push notifications)
 
-## Sites
+## 🛠️ Installation
 
-- POST /api/sites { name, sector, location, ... }
-- GET /api/sites
-- GET /api/sites/:id
-- PUT /api/sites/:id
-- DELETE /api/sites/:id
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd api
+```
 
-## Transactions
+2. Install dependencies:
+```bash
+npm install
+```
 
-- POST /api/transactions
-  - Body: { transactionId, taker, site (ObjectId) OR siteName (string), outDate, inDate, returnee, remark }
-  - If siteName provided and site not exists — site will be created automatically
-- GET /api/transactions
-- GET /api/transactions/:id
-- PUT /api/transactions/:id
-- DELETE /api/transactions/:id
+3. Create `.env` file:
+```env
+PORT=4000
+MONGODB_URI=mongodb://localhost:27017/frankly_warehouse
+JWT_SECRET=your_super_secret_jwt_key_here
+ALLOWED_ORIGINS=http://localhost:3000,https://frankly.ae
 
-## Transaction Items
+# Cloudinary (required for image uploads)
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
 
-- POST /api/transaction-items
-  - Body: { transactionItemId, transactionId (ObjectId), item (ObjectId) OR itemSku (string), outQuantity, inQuantity, outDate, inDate, remark }
-- GET /api/transaction-items?transactionId=...
-- GET /api/transaction-items/:id
-- PUT /api/transaction-items/:id
-- DELETE /api/transaction-items/:id
+# Google Sheets (optional)
+GOOGLE_SHEETS_CREDENTIALS={"type":"service_account",...}
+GOOGLE_SHEETS_SPREADSHEET_ID=your_spreadsheet_id
 
-## Deliveries
+# OneSignal (optional)
+ONESIGNAL_APP_ID=your_app_id
+ONESIGNAL_API_KEY=your_api_key
+```
 
-- POST /api/deliveries
-  - Form-data or JSON. fields: deliveryId, deliveryDate, Seller, amount, receivedBy, remarks
-  - Optionally upload `invoice` file (multipart/form-data) OR send `invoiceBase64` with `invoiceContentType` and `invoiceFilename`.
-- GET /api/deliveries
-- GET /api/deliveries/:id
-- PUT /api/deliveries/:id
-- DELETE /api/deliveries/:id
+4. Start the server:
+```bash
+# Development
+npm run dev
 
-## Delivery Items
+# Production
+npm start
+```
 
-- POST /api/delivery-items
-  - Body: { deliveryItemId, deliveryId (ObjectId), item (ObjectId) OR itemSku (string), quantity }
-- GET /api/delivery-items?deliveryId=...
-- GET /api/delivery-items/:id
-- PUT /api/delivery-items/:id
-- DELETE /api/delivery-items/:id
+## 📚 API Documentation
 
-## Notes / Tips
+Interactive API documentation available at:
+- **Local**: http://localhost:4000/api-docs
+- **Production**: https://frankly-api-1.onrender.com/api-docs
 
-- Images and invoices are stored as binary buffer in MongoDB. For large files or production you might prefer storing files in S3 (or similar) and saving URLs in DB.
-- All models use `timestamps: true`, so createdAt and updatedAt fields are maintained automatically by Mongoose.
-- Protect your `JWT_SECRET` and production DB credentials; do not commit `.env` to source control.
+## 🔐 Authentication
+
+All endpoints (except `/api/auth/*`) require JWT Bearer token:
+
+```bash
+Authorization: Bearer <your_jwt_token>
+```
+
+### Login
+```bash
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "password123"
+}
+```
+
+Response:
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "_id": "...",
+    "username": "admin",
+    "fullName": "Admin User",
+    "role": "Admin"
+  }
+}
+```
+
+## 📡 API Endpoints
+
+### 🔐 Authentication
+- `POST /api/auth/signup` - Register new user
+- `POST /api/auth/login` - User login
+- `POST /api/auth/change-password` - Change password
+
+### 📦 Inventory
+- `GET /api/inventory` - Get all items
+- `POST /api/inventory` - Add new item
+- `GET /api/inventory/:id` - Get item by ID
+- `PUT /api/inventory/:id` - Update item
+- `DELETE /api/inventory/:id` - Delete item
+- `GET /api/inventory/barcode/:barcode` - Search by barcode
+
+### 🔄 Transactions
+- `GET /api/transactions` - Get all transactions
+- `POST /api/transactions` - Create transaction
+- `GET /api/transactions/:id` - Get transaction by ID
+- `PUT /api/transactions/:id` - Update transaction
+- `DELETE /api/transactions/:id` - Delete transaction
+
+### 🔀 Stock Transfers
+- `GET /api/stock-transfers` - Get all transfers
+- `POST /api/stock-transfers/request` - Request transfer
+- `POST /api/stock-transfers/:id/approve` - Approve transfer
+- `DELETE /api/stock-transfers/:id` - Delete transfer
+
+### 🚚 Deliveries
+- `GET /api/deliveries` - Get all deliveries
+- `POST /api/deliveries` - Create delivery
+- `GET /api/deliveries/:id` - Get delivery by ID
+- `PUT /api/deliveries/:id` - Update delivery
+- `DELETE /api/deliveries/:id` - Delete delivery
+
+### 🏗️ Sites
+- `GET /api/sites` - Get all sites
+- `POST /api/sites` - Create site
+- `GET /api/sites/:id` - Get site by ID
+- `PUT /api/sites/:id` - Update site
+- `DELETE /api/sites/:id` - Delete site
+- `GET /api/sites/:id/items` - Get site inventory
+
+### 👥 Users
+- `GET /api/users` - Get all users
+- `POST /api/users` - Create user
+- `GET /api/users/:id` - Get user by ID
+- `PUT /api/users/:id` - Update user
+- `DELETE /api/users/:id` - Delete user
+- `PUT /api/users/:id/permissions` - Update permissions
+
+### ⏰ Attendance
+- `GET /api/attendance` - Get all attendance
+- `POST /api/attendance/checkin` - Check in
+- `PUT /api/attendance/checkout/:id` - Check out
+- `GET /api/attendance/today` - Today's attendance
+- `GET /api/attendance/user/:userId` - User attendance history
+
+### 💼 Office Assets
+- `GET /api/office-assets` - Get all assets
+- `POST /api/office-assets` - Create asset
+- `GET /api/office-assets/:id` - Get asset by ID
+- `PUT /api/office-assets/:id` - Update asset
+- `DELETE /api/office-assets/:id` - Delete asset
+
+### 📊 Google Sheets
+- `POST /api/google-sheets/sync` - Manual sync all data
+- `POST /api/google-sheets/sync/inventory` - Sync inventory
+- `POST /api/google-sheets/sync/transactions` - Sync transactions
+
+### 📤 Uploads
+- `POST /api/uploads` - Upload file to Cloudinary
+
+### 📞 Contacts
+- `GET /api/contacts` - Get all contacts
+- `POST /api/contacts` - Create contact
+
+### 🔔 Notifications
+- `GET /api/notifications` - Get all notifications
+- `POST /api/notifications` - Create notification
+
+### 📝 Activities
+- `GET /api/activities` - Get recent activities
+
+### ⚙️ Config
+- `GET /api/app-config` - Get app configuration
+
+### 💚 Health Check
+- `GET /api/health` - Server health status
+
+## 🔌 Real-time Events (Socket.io)
+
+Connect with JWT token:
+```javascript
+const socket = io('http://localhost:4000', {
+  auth: { token: 'your_jwt_token' }
+});
+```
+
+### Events Emitted by Server:
+- `permissionsUpdated` - User permissions changed
+- `inventory:created` - New inventory item
+- `inventory:updated` - Inventory item updated
+- `inventory:deleted` - Inventory item deleted
+- `transaction:created` - New transaction
+- `transaction:updated` - Transaction updated
+- `transaction:deleted` - Transaction deleted
+- `delivery:created` - New delivery
+- `delivery:updated` - Delivery updated
+- `delivery:deleted` - Delivery deleted
+- `site:created` - New site
+- `site:updated` - Site updated
+- `site:deleted` - Site deleted
+- `attendance:checkin` - Employee checked in
+- `attendance:checkout` - Employee checked out
+
+## 📦 Database Models
+
+### User
+- username, password (hashed), fullName, role, email, phone
+- emiratesIdNumber, emiratesIdExpiryDate, dateOfBirth
+- permissions, isActive
+
+### Inventory
+- sku, name, category, initialStock, currentStock
+- unitOfMeasure, barcode, imageUrl, status
+
+### Transaction
+- transactionId, type (ISSUE/RETURN), item, quantity
+- site, employee, timestamp
+
+### Site
+- siteCode, siteName, location, status
+- client, engineer, sector
+
+### Delivery
+- seller, amount, deliveryDate, invoiceUrl
+
+### Attendance
+- user, checkIn, checkOut, workingHours
+- checkInLocation, checkOutLocation, date
+
+## 🔒 Security Features
+
+- JWT authentication with bcrypt password hashing
+- Role-based access control (RBAC)
+- CORS configuration with whitelist
+- Security headers (HSTS, XSS Protection, etc.)
+- Input validation and sanitization
+- Rate limiting ready
+- MongoDB injection prevention
+
+## 🚀 Deployment
+
+### Environment Variables (Production)
+```env
+NODE_ENV=production
+PORT=4000
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/frankly
+JWT_SECRET=<strong-random-secret>
+ALLOWED_ORIGINS=https://frankly.ae,https://app.frankly.ae
+```
+
+### Start Production Server
+```bash
+npm start
+```
+
+### Using PM2
+```bash
+npm install -g pm2
+pm2 start src/server.js --name frankly-api
+pm2 save
+pm2 startup
+```
+
+## 📊 Monitoring
+
+- Health check endpoint: `/api/health`
+- Logs stored in `logs/` directory
+- Winston logger for error tracking
+- Keep-alive service prevents server sleep
+
+## 🔧 Scripts
+
+```bash
+npm start          # Start production server
+npm run dev        # Start development server with nodemon
+npm test           # Run tests (if configured)
+```
+
+## 📝 Logging
+
+Logs are stored in:
+- `logs/combined.log` - All logs
+- `logs/error.log` - Error logs only
+
+## 🌐 CORS Configuration
+
+Configure allowed origins in `.env`:
+```env
+ALLOWED_ORIGINS=http://localhost:3000,https://frankly.ae
+```
+
+## 📱 Push Notifications
+
+OneSignal integration for mobile push notifications:
+- Check-in/check-out notifications
+- Document expiry alerts
+- System notifications
+
+## 📊 Google Sheets Auto-Sync
+
+Daily automatic sync at 2:00 AM (Asia/Dubai timezone):
+- Inventory
+- Transactions
+- Deliveries
+- Sites
+- Employees
+- Office Assets
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
+## 📄 License
+
+Proprietary - Frankly Built Contracting LLC
+
+## 📞 Support
+
+For support, contact: support@frankly.ae
+
+---
+
+**Version**: 1.0.0  
+**Last Updated**: 2024  
+**Company**: Frankly Built Contracting LLC, Dubai, UAE

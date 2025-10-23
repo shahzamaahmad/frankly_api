@@ -72,8 +72,8 @@ const { createLog } = require('../utils/logger');
 
 router.post('/generate-username', async (req, res) => {
   try {
-    const { firstName, lastName } = req.body;
-    const username = User.generateUsername(firstName, lastName);
+    const { fullName } = req.body;
+    const username = User.generateUsername(fullName);
     const exists = await User.checkUsernameExists(username);
     res.json({ username, exists });
   } catch (err) {
@@ -96,10 +96,10 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ message: 'Username already exists' });
     }
     const user = new User(userData);
-    if (req.body.firstName && req.body.lastName && !req.body.fullName) {
-      user.fullName = `${req.body.firstName} ${req.body.lastName}`;
-    }
     await user.save();
+
+    await createLog('ADD', user._id, user.username, `Created employee: ${user.username}`);
+
     res.status(201).json({ message: 'User created', username: user.username });
   } catch (err) {
     console.error('Signup error:', err);

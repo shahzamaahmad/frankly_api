@@ -18,10 +18,10 @@ const upload = multer({
   }
 });
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
-const checkPermission = require('../middlewares/checkPermission');
+const { checkPermission, checkAdmin } = require('../middlewares/checkPermission');
 const { createLog } = require('../utils/logger');
 
-router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
+router.post('/', checkAdmin(), (req, res, next) => {
   upload.single('invoice')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     next();
@@ -57,8 +57,8 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
     const now = getDubaiTime();
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const yyyy = now.getFullYear();
-    const dateStr = `${dd}${mm}${yyyy}`;
+    const yy = String(now.getFullYear()).slice(-2);
+    const dateStr = `${dd}${mm}${yy}`;
     const todayPrefix = `DEL-${dateStr}-`;
     const lastDelivery = await Delivery.findOne({ deliveryId: { $regex: `^${todayPrefix}` } }).sort({ deliveryId: -1 });
     let nextNum = 1;
@@ -66,7 +66,7 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
       const match = lastDelivery.deliveryId.match(/-(\d+)$/);
       if (match) nextNum = parseInt(match[1]) + 1;
     }
-    body.deliveryId = `${todayPrefix}${String(nextNum).padStart(4, '0')}`;
+    body.deliveryId = `${todayPrefix}${String(nextNum).padStart(2, '0')}`;
     
     if (body.items && Array.isArray(body.items)) {
       for (const item of body.items) {
@@ -95,6 +95,7 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
     await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${body.deliveryNumber || d._id}`);
     if (global.io) {
       global.io.emit('delivery:created', d);
+      global.io.emit('inventory:updated');
     }
     res.status(201).json(d);
   } catch (err) {
@@ -103,7 +104,7 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
   }
 });
 
-router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
+router.get('/', checkPermission(), async (req, res) => {
   try {
     const list = await Delivery.find().populate('items.itemName', 'name sku');
     res.json(list);
@@ -113,7 +114,7 @@ router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
   }
 });
 
-router.get('/:id', checkPermission('viewDeliveries'), async (req, res) => {
+router.get('/:id', checkPermission(), async (req, res) => {
   try {
     const item = await Delivery.findById(req.params.id).populate('items.itemName', 'name sku');
     if (!item) return res.status(404).json({ error: 'Delivery not found' });
@@ -124,7 +125,7 @@ router.get('/:id', checkPermission('viewDeliveries'), async (req, res) => {
   }
 });
 
-router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
+router.put('/:id', checkAdmin(), (req, res, next) => {
   upload.single('invoice')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     next();
@@ -179,6 +180,7 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
     await createLog('EDIT_DELIVERY', req.user.id, req.user.username, `Edited delivery: ${req.params.id}`);
     if (global.io) {
       global.io.emit('delivery:updated', updated);
+      global.io.emit('inventory:updated');
     }
     res.json(updated);
   } catch (err) {
@@ -187,7 +189,7 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
   }
 });
 
-router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
+router.delete('/:id', checkAdmin(), async (req, res) => {
   try {
     const delivery = await Delivery.findById(req.params.id);
     if (!delivery) {
@@ -208,6 +210,7 @@ router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
     await createLog('DELETE_DELIVERY', req.user.id, req.user.username, `Deleted delivery: ${req.params.id}`);
     if (global.io) {
       global.io.emit('delivery:deleted', { id: req.params.id });
+      global.io.emit('inventory:updated');
     }
     res.json({ message: 'Deleted' });
   } catch (err) {
