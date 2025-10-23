@@ -22,9 +22,9 @@ router.post('/', checkAdmin(), async (req, res) => {
 router.get('/', checkPermission(), async (req, res) => {
   try {
     const list = await Site.find()
-      .populate('engineer', 'username firstName lastName')
-      .populate('siteManager', 'username firstName lastName')
-      .populate('safetyOfficer', 'username firstName lastName')
+      .populate('engineer', 'username fullName')
+      .populate('siteManager', 'username fullName')
+      .populate('safetyOfficer', 'username fullName')
       .lean();
     res.json(list);
   } catch (err) {
@@ -36,9 +36,9 @@ router.get('/', checkPermission(), async (req, res) => {
 router.get('/:id', checkPermission(), async (req, res) => {
   try {
     const item = await Site.findById(req.params.id)
-      .populate('engineer', 'username firstName lastName')
-      .populate('siteManager', 'username firstName lastName')
-      .populate('safetyOfficer', 'username firstName lastName');
+      .populate('engineer', 'username fullName')
+      .populate('siteManager', 'username fullName')
+      .populate('safetyOfficer', 'username fullName');
     if (!item) return res.status(404).json({ error: 'Site not found' });
     res.json(item);
   } catch (err) {
@@ -50,9 +50,9 @@ router.get('/:id', checkPermission(), async (req, res) => {
 router.put('/:id', checkAdmin(), async (req, res) => {
   try {
     const updated = await Site.findByIdAndUpdate(req.params.id, req.body, { new: true })
-      .populate('engineer', 'username firstName lastName')
-      .populate('siteManager', 'username firstName lastName')
-      .populate('safetyOfficer', 'username firstName lastName');
+      .populate('engineer', 'username fullName')
+      .populate('siteManager', 'username fullName')
+      .populate('safetyOfficer', 'username fullName');
     if (!updated) return res.status(404).json({ error: 'Site not found' });
     if (global.io) global.io.emit('site:updated', updated);
     res.json(updated);

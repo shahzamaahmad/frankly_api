@@ -6,7 +6,7 @@ const { authMiddleware } = require('../middlewares/auth');
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const users = await User.find({ isActive: true })
-      .select('username fullName firstName lastName role phone email profilePictureUrl')
+      .select('username fullName role phone email profilePictureUrl')
       .sort({ role: 1, fullName: 1 });
     res.json(users);
   } catch (error) {

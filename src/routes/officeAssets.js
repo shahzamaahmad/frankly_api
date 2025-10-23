@@ -246,8 +246,8 @@ router.get('/:id/transactions', authMiddleware, async (req, res) => {
   try {
     const AssetTransaction = require('../models/assetTransaction');
     const transactions = await AssetTransaction.find({ asset: req.params.id })
-      .populate('employee', 'fullName')
-      .populate('assignedBy', 'fullName')
+      .populate('employee', 'fullName username')
+      .populate('assignedBy', 'fullName username')
       .sort({ createdAt: -1 })
       .lean();
     res.json(transactions);

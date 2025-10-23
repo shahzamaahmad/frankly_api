@@ -72,8 +72,8 @@ const { createLog } = require('../utils/logger');
 
 router.post('/generate-username', async (req, res) => {
   try {
-    const { firstName, lastName } = req.body;
-    const username = User.generateUsername(firstName, lastName);
+    const { fullName } = req.body;
+    const username = User.generateUsername(fullName);
     const exists = await User.checkUsernameExists(username);
     res.json({ username, exists });
   } catch (err) {

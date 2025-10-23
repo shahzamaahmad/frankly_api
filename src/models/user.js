@@ -9,8 +9,7 @@ const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
 
-  firstName: { type: String },
-  lastName: { type: String },
+  fullName: { type: String },
   employeeId: { type: String },
   profilePictureUrl: { type: String },
   emergencyContact: { type: String },
@@ -59,12 +58,11 @@ UserSchema.pre('save', async function (next) {
   }
 });
 
-UserSchema.statics.generateUsername = function (firstName, lastName) {
+UserSchema.statics.generateUsername = function (fullName) {
   let baseUsername = '';
-  if (lastName) {
-    baseUsername = lastName.toLowerCase();
-  } else if (firstName) {
-    baseUsername = firstName.toLowerCase();
+  if (fullName) {
+    const parts = fullName.split(' ');
+    baseUsername = (parts[parts.length - 1] || parts[0] || 'user').toLowerCase();
   } else {
     baseUsername = 'user';
   }
@@ -86,6 +84,8 @@ UserSchema.methods.comparePassword = async function (candidate) {
     return false;
   }
 }
+
+
 
 UserSchema.index({ username: 1 });
 UserSchema.index({ isActive: 1 });

@@ -16,7 +16,7 @@ router.get('/', authMiddleware, checkPermission(), async (req, res) => {
     if (item && typeof item === 'string') filter.item = item;
 
     const transactions = await Transaction.find(filter)
-      .populate('employee', 'firstName lastName username email')
+      .populate('employee', 'fullName username email')
       .populate('site', 'siteName siteCode')
       .populate('item', 'name sku')
       .sort({ timestamp: -1 });
@@ -30,7 +30,7 @@ router.get('/', authMiddleware, checkPermission(), async (req, res) => {
 router.get('/:id', authMiddleware, checkPermission(), async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id)
-      .populate('employee', 'firstName lastName username email')
+      .populate('employee', 'fullName username email')
       .populate('site', 'siteName siteCode')
       .populate('item');
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
@@ -88,7 +88,7 @@ router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
 
     await transaction.save();
     const populated = await Transaction.findById(transaction._id)
-      .populate('employee', 'firstName lastName username email')
+      .populate('employee', 'fullName username email')
       .populate('site', 'siteName siteCode')
       .populate('item', 'name sku');
 
@@ -151,7 +151,7 @@ router.put('/:id', authMiddleware, checkPermission('editTransaction'), async (re
 
     await transaction.save();
     const populated = await Transaction.findById(transaction._id)
-      .populate('employee', 'firstName lastName username email')
+      .populate('employee', 'fullName username email')
       .populate('site', 'siteName siteCode')
       .populate('item', 'name sku');
 

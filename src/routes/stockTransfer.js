@@ -92,8 +92,8 @@ router.get('/', authMiddleware, async (req, res) => {
       .populate('items.item', 'name sku')
       .populate('fromSite', 'siteName siteCode')
       .populate('toSite', 'siteName siteCode')
-      .populate('employee', 'firstName lastName username')
-      .populate('approvedBy', 'firstName lastName username')
+      .populate('employee', 'fullName username')
+      .populate('approvedBy', 'fullName username')
       .sort({ requestDate: -1 });
     res.json(transfers);
   } catch (error) {
@@ -108,7 +108,7 @@ router.get('/pending', authMiddleware, async (req, res) => {
       .populate('items.item', 'name sku')
       .populate('fromSite', 'siteName siteCode')
       .populate('toSite', 'siteName siteCode')
-      .populate('employee', 'firstName lastName username')
+      .populate('employee', 'fullName username')
       .sort({ requestDate: -1 });
     res.json(pending);
   } catch (error) {

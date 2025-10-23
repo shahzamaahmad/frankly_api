@@ -239,6 +239,15 @@ router.post('/:id/assign-office-asset', checkAdmin(), async (req, res) => {
       status: 'ACTIVE'
     });
     await transaction.save();
+    
+    const populatedTransaction = await AssetTransaction.findById(transaction._id)
+      .populate('asset', 'name sku')
+      .populate('employee', 'fullName username')
+      .populate('assignedBy', 'fullName username')
+      .lean();
+    
+    const io = req.app.get('io');
+    if (io) io.emit('assetTransaction:created', populatedTransaction);
 
     res.json({ message: 'Office asset assigned successfully' });
   } catch (err) {
