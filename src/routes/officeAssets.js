@@ -22,6 +22,20 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
+// GET office asset by SKU/barcode
+router.get('/sku/:sku', authMiddleware, async (req, res) => {
+  try {
+    const asset = await OfficeAsset.findOne({ sku: req.params.sku }).populate('assignedTo', 'fullName');
+    if (!asset) {
+      return res.status(404).json({ message: 'Office asset not found' });
+    }
+    res.json(asset);
+  } catch (err) {
+    console.error('Error fetching office asset by SKU:', err);
+    res.status(500).json({ message: 'Failed to fetch office asset' });
+  }
+});
+
 // GET office asset by ID
 router.get('/:id', authMiddleware, async (req, res) => {
   try {

@@ -7,6 +7,7 @@ router.get('/', checkPermission(), async (req, res) => {
   try {
     const users = await User.find()
       .select('-password')
+      .populate('assets.item', 'name sku')
       .lean();
     res.json(users);
   } catch (err) {
@@ -17,7 +18,9 @@ router.get('/', checkPermission(), async (req, res) => {
 
 router.get('/:id', checkPermission(), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const user = await User.findById(req.params.id)
+      .select('-password')
+      .populate('assets.item', 'name sku');
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
