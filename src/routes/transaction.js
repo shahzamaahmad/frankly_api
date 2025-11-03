@@ -57,14 +57,8 @@ router.post('/', authMiddleware, checkAdmin(), async (req, res) => {
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yy = String(now.getFullYear()).slice(-2);
     const dateStr = `${dd}${mm}${yy}`;
-    const todayPrefix = `TXN-${dateStr}-`;
-    const lastTransaction = await Transaction.findOne({ transactionId: { $regex: `^${todayPrefix}` } }).sort({ transactionId: -1 });
-    let nextNum = 1;
-    if (lastTransaction) {
-      const match = lastTransaction.transactionId.match(/-(\d+)$/);
-      if (match) nextNum = parseInt(match[1]) + 1;
-    }
-    const transactionId = `${todayPrefix}${String(nextNum).padStart(2, '0')}`;
+    const randomNum = Math.floor(Math.random() * 90) + 10;
+    const transactionId = `TXN-${dateStr}-${randomNum}`;
 
     if (type === 'ISSUE') {
       if (inventory.currentStock < quantity) {
