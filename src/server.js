@@ -1,6 +1,5 @@
 // Load environment variables
 require('dotenv').config();
-
 process.env.TZ = 'Asia/Dubai';
 
 // Utility to safely load modules
@@ -54,10 +53,9 @@ const { authMiddleware } = loadRoute('./middlewares/auth');
 
 // Initialize Express app
 const app = express();
-
 app.set('trust proxy', 1);
 
-// --- Security and middleware setup ---
+// --- Security and middleware ---
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
 app.use(cors({
   origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
@@ -65,7 +63,6 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -129,23 +126,24 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-// --- MongoDB Connection ---
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  maxPoolSize: 10,
-  minPoolSize: 2,
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-}).then(async () => {
-  console.log('✅ MongoDB connected on Vercel');
-  const googleSheets = require('./utils/googleSheets');
-  await googleSheets.initialize();
-  const { startDailySync } = require('./utils/cronJobs');
-  startDailySync();
-}).catch(err => {
-  console.error('MongoDB connection error:', err.message);
-});
+// --- MongoDB Connection for serverless ---
+let isConnected = false;
 
-// ✅ IMPORTANT: Export app instead of starting a server (for Vercel)
+async function connectMongo() {
+  if (isConnected) return;
+  await mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+  });
+  isConnected = true;
+  console.log('✅ MongoDB connected on Vercel');
+}
+
+connectMongo().catch(err => console.error('MongoDB connection error:', err.message));
+
+// --- Export app for Vercel ---
 module.exports = app;
