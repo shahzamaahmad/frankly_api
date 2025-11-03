@@ -1,8 +1,9 @@
-
+// Load environment variables
 require('dotenv').config();
 
 process.env.TZ = 'Asia/Dubai';
 
+// Utility to safely load modules
 const loadRoute = (path) => {
   try {
     return require(path);
@@ -12,14 +13,14 @@ const loadRoute = (path) => {
   }
 };
 
+// Core packages
 const express = loadRoute('express');
 const mongoose = loadRoute('mongoose');
 const cors = loadRoute('cors');
 const swaggerUi = loadRoute('swagger-ui-express');
 const swaggerSpec = loadRoute('./swagger');
 
-
-
+// Route imports
 let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes;
 let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
 let logRoutes, onesignalRoutes, contactsRoutes, appConfigRoutes, notificationsRoutes;
@@ -51,10 +52,12 @@ initRoutes();
 
 const { authMiddleware } = loadRoute('./middlewares/auth');
 
+// Initialize Express app
 const app = express();
 
 app.set('trust proxy', 1);
 
+// --- Security and middleware setup ---
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
 app.use(cors({
   origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
@@ -75,22 +78,21 @@ app.use((req, res, next) => {
   next();
 });
 
+// --- Routes ---
 app.get('/api/health', (req, res) => {
-  console.log('💚 Keep-alive ping received');
-  res.json({ 
+  res.json({
     status: '✨ Frankly API is alive and running',
-    server: 'frankly.ae',
+    server: 'vercel',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    message: '🚀 All systems operational'
+    message: '🚀 All systems operational on Vercel'
   });
 });
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
 app.use('/api/auth', authRoutes);
 
-// protect the rest
+// Protected routes
 try {
   app.use('/api/inventory', authMiddleware, inventoryRoutes);
   app.use('/api/sites', authMiddleware, siteRoutes);
@@ -112,9 +114,9 @@ try {
   app.use('/api/google-sheets', authMiddleware, googleSheetsRoutes);
 } catch (err) {
   console.error('Route setup error:', err);
-  process.exit(1);
 }
 
+// --- Error handling ---
 app.use((err, req, res, _next) => {
   console.error('Error:', err.stack);
   res.status(err.status || 500).json({
@@ -127,47 +129,7 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-const PORT = process.env.PORT || 4000;
-
-const http = require('http');
-const socketIo = require('socket.io');
-const jwt = require('jsonwebtoken');
-
-const server = http.createServer(app);
-const io = socketIo(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
-});
-
-io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
-  if (!token) {
-    return next(new Error('Authentication error'));
-  }
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.userId = decoded.id;
-    next();
-  } catch (err) {
-    next(new Error('Authentication error'));
-  }
-});
-
-io.on('connection', (socket) => {
-  socket.join(`user:${socket.userId}`);
-  socket.on('disconnect', () => {});
-});
-
-global.io = io;
-
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
-
-server.on('error', (err) => {
-  console.error('Server error:', err);
-  process.exit(1);
-});
-
+// --- MongoDB Connection ---
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -176,7 +138,7 @@ mongoose.connect(process.env.MONGODB_URI, {
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
 }).then(async () => {
-  console.log('✅ MongoDB connected');
+  console.log('✅ MongoDB connected on Vercel');
   const googleSheets = require('./utils/googleSheets');
   await googleSheets.initialize();
   const { startDailySync } = require('./utils/cronJobs');
@@ -185,31 +147,5 @@ mongoose.connect(process.env.MONGODB_URI, {
   console.error('MongoDB connection error:', err.message);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled rejection at:', promise, 'reason:', reason);
-  process.exit(1);
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception:', err.message);
-  console.error('Stack:', err.stack);
-  process.exit(1);
-});
-
-process.on('SIGTERM', async () => {
-  try {
-    await mongoose.connection.close();
-  } catch (err) {
-    console.error('Error closing MongoDB connection:', err);
-  }
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  try {
-    await mongoose.connection.close();
-  } catch (err) {
-    console.error('Error closing MongoDB connection:', err);
-  }
-  process.exit(0);
-});
+// ✅ IMPORTANT: Export app instead of starting a server (for Vercel)
+module.exports = app;
