@@ -5,6 +5,7 @@ const FavoriteSchema = new mongoose.Schema({
   itemType: { type: String, enum: ['inventory', 'site', 'transaction', 'delivery', 'employee'], required: true },
   itemId: { type: mongoose.Schema.Types.ObjectId, required: true },
   itemName: { type: String, required: true },
+  image: { type: String },
 }, { timestamps: true });
 
 FavoriteSchema.index({ user: 1, itemType: 1, itemId: 1 }, { unique: true });

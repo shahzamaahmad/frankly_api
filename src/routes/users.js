@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/user');
-const checkPermission = require('../middlewares/checkPermission');
+const { checkPermission, checkAdmin } = require('../middlewares/checkPermission');
 
-router.get('/', checkPermission('viewEmployees'), async (req, res) => {
+router.get('/', checkPermission(), async (req, res) => {
   try {
     const users = await User.find()
       .select('-password')
@@ -15,9 +15,10 @@ router.get('/', checkPermission('viewEmployees'), async (req, res) => {
   }
 });
 
-router.get('/:id', checkPermission('viewEmployees'), async (req, res) => {
+router.get('/:id', checkPermission(), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const user = await User.findById(req.params.id)
+      .select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
@@ -26,7 +27,7 @@ router.get('/:id', checkPermission('viewEmployees'), async (req, res) => {
   }
 });
 
-router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
+router.put('/:id', checkAdmin(), async (req, res) => {
   try {
     const updates = { ...req.body };
 
@@ -34,9 +35,6 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
       return res.status(400).json({ message: 'Username must be at least 3 characters' });
     }
 
-    if (updates.firstName && updates.lastName && !updates.fullName) {
-      updates.fullName = `${updates.firstName} ${updates.lastName}`;
-    }
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
@@ -48,6 +46,15 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
     }
     Object.assign(user, updates);
     await user.save();
+
+    const Log = require('../models/log');
+    await Log.create({
+      userId: req.user._id,
+      username: req.user.username,
+      action: 'UPDATE',
+      details: `Updated employee: ${user.username}`,
+      timestamp: new Date()
+    });
 
     if (permissionsChanged && global.io) {
       global.io.to(`user:${req.params.id}`).emit('permissionsUpdated', { permissions: user.permissions });
@@ -66,7 +73,7 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
   }
 });
 
-router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
+router.delete('/:id', checkAdmin(), async (req, res) => {
   try {
     if (req.params.id === req.user.id) {
       return res.status(400).json({ message: 'Cannot delete your own account' });
@@ -74,6 +81,16 @@ router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
 
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const Log = require('../models/log');
+    await Log.create({
+      userId: req.user._id,
+      username: req.user.username,
+      action: 'DELETE',
+      details: `Deleted employee: ${user.username}`,
+      timestamp: new Date()
+    });
+
     res.json({ message: 'User deleted successfully' });
   } catch (err) {
     console.error('Delete user error:', err);
@@ -131,7 +148,7 @@ router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.post('/:id/assign-asset', checkPermission('editEmployees'), async (req, res) => {
+router.post('/:id/assign-asset', checkAdmin(), async (req, res) => {
   try {
     const { item, quantity, condition, remarks } = req.body;
     const Inventory = require('../models/inventory');
@@ -176,6 +193,66 @@ router.post('/:id/assign-asset', checkPermission('editEmployees'), async (req, r
     res.json({ message: 'Asset assigned successfully' });
   } catch (err) {
     console.error('Assign asset error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+router.post('/:id/assign-office-asset', checkAdmin(), async (req, res) => {
+  try {
+    const { assetId, quantity, condition, remarks } = req.body;
+    const OfficeAsset = require('../models/officeAsset');
+    const AssetTransaction = require('../models/assetTransaction');
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const officeAsset = await OfficeAsset.findById(assetId);
+    if (!officeAsset) return res.status(404).json({ message: 'Office asset not found' });
+
+    if (officeAsset.quantity < quantity) {
+      return res.status(400).json({ message: 'Insufficient asset quantity' });
+    }
+
+    officeAsset.assignedTo = req.params.id;
+    officeAsset.quantity -= quantity;
+    await officeAsset.save();
+
+    const now = new Date();
+    const dateStr = `${now.getDate().toString().padStart(2, '0')}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getFullYear().toString().slice(-2)}`;
+    const todayTransactions = await AssetTransaction.countDocuments({
+      createdAt: {
+        $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+        $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      }
+    });
+    const sequence = (todayTransactions + 1).toString().padStart(3, '0');
+    const transactionId = `OTXN-${dateStr}-${sequence}`;
+    const transaction = new AssetTransaction({
+      transactionId,
+      type: 'ASSIGN',
+      asset: assetId,
+      employee: req.params.id,
+      assignedBy: req.user._id,
+      quantity,
+      assignDate: new Date(),
+      condition,
+      remarks,
+      status: 'ACTIVE'
+    });
+    await transaction.save();
+    
+    const populatedTransaction = await AssetTransaction.findById(transaction._id)
+      .populate('asset', 'name sku')
+      .populate('employee', 'fullName username')
+      .populate('assignedBy', 'fullName username')
+      .lean();
+    
+    const io = req.app.get('io');
+    if (io) io.emit('assetTransaction:created', populatedTransaction);
+
+    res.json({ message: 'Office asset assigned successfully' });
+  } catch (err) {
+    console.error('Assign office asset error:', err);
     res.status(500).json({ message: 'Internal server error' });
   }
 });

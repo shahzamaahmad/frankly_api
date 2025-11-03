@@ -11,7 +11,7 @@ router.get('/', authMiddleware, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
     const limit = parseInt(req.query.limit) || 500;
-    const isAdmin = user.role === 'admin';
+    const isAdmin = user.role?.toLowerCase() === 'admin';
     const query = isAdmin ? {} : { userId: req.user.id };
     const logs = await Log.find(query).sort({ timestamp: -1 }).limit(limit).lean();
     res.json(logs);

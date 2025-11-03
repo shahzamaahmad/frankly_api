@@ -16,12 +16,13 @@ router.get('/', authMiddleware, async (req, res) => {
 // Add favorite
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { itemType, itemId, itemName } = req.body;
+    const { itemType, itemId, itemName, image } = req.body;
     const favorite = new Favorite({
       user: req.user._id,
       itemType,
       itemId,
       itemName,
+      image,
     });
     await favorite.save();
     res.status(201).json(favorite);

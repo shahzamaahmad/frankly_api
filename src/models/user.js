@@ -9,8 +9,6 @@ const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
 
-  firstName: { type: String },
-  lastName: { type: String },
   fullName: { type: String },
   employeeId: { type: String },
   profilePictureUrl: { type: String },
@@ -22,34 +20,10 @@ const UserSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
 
   permissions: {
-    viewInventory: { type: Boolean, default: false },
-    addInventory: { type: Boolean, default: false },
-    editInventory: { type: Boolean, default: false },
-    deleteInventory: { type: Boolean, default: false },
-    viewTransactions: { type: Boolean, default: false },
-    addTransactions: { type: Boolean, default: false },
-    editTransactions: { type: Boolean, default: false },
-    deleteTransactions: { type: Boolean, default: false },
-    viewDeliveries: { type: Boolean, default: false },
-    addDeliveries: { type: Boolean, default: false },
-    editDeliveries: { type: Boolean, default: false },
-    deleteDeliveries: { type: Boolean, default: false },
-    viewEmployees: { type: Boolean, default: false },
-    addEmployees: { type: Boolean, default: false },
-    editEmployees: { type: Boolean, default: false },
-    deleteEmployees: { type: Boolean, default: false },
-    viewSites: { type: Boolean, default: false },
-    addSites: { type: Boolean, default: false },
-    editSites: { type: Boolean, default: false },
-    deleteSites: { type: Boolean, default: false },
-    viewContacts: { type: Boolean, default: true },
-    viewReportAttendance: { type: Boolean, default: false },
-    editReportAttendance: { type: Boolean, default: false },
-    deleteReportAttendance: { type: Boolean, default: false },
-    viewOnesignalCard: { type: Boolean, default: false },
-    onesignalSendButton: { type: Boolean, default: false },
-    viewEmployeeTracking: { type: Boolean, default: false },
-    approveAttendance: { type: Boolean, default: false },
+    view: { type: Boolean, default: true },
+    add: { type: Boolean, default: false },
+    update: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false }
   },
 
   department: { type: String },
@@ -84,12 +58,11 @@ UserSchema.pre('save', async function (next) {
   }
 });
 
-UserSchema.statics.generateUsername = function (firstName, lastName) {
+UserSchema.statics.generateUsername = function (fullName) {
   let baseUsername = '';
-  if (lastName) {
-    baseUsername = lastName.toLowerCase();
-  } else if (firstName) {
-    baseUsername = firstName.toLowerCase();
+  if (fullName) {
+    const parts = fullName.split(' ');
+    baseUsername = (parts[parts.length - 1] || parts[0] || 'user').toLowerCase();
   } else {
     baseUsername = 'user';
   }
@@ -111,6 +84,8 @@ UserSchema.methods.comparePassword = async function (candidate) {
     return false;
   }
 }
+
+
 
 UserSchema.index({ username: 1 });
 UserSchema.index({ isActive: 1 });
