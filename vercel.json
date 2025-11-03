@@ -11,6 +11,5 @@
       "src": "/(.*)",
       "dest": "src/server.js"
     }
-  ],
-  "installCommand": "npm install"
+  ]
 }
