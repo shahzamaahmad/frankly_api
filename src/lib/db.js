@@ -1,6 +1,7 @@
 const { getSupabaseAdmin } = require('./supabase');
 
-const ID_COLUMN = process.env.SUPABASE_ID_COLUMN || '_id';
+const CONFIGURED_ID_COLUMN = process.env.SUPABASE_ID_COLUMN;
+const ID_COLUMN = CONFIGURED_ID_COLUMN || '_id';
 const USE_SNAKE_CASE = process.env.SUPABASE_USE_SNAKE_CASE === 'true';
 
 const tableCandidates = {
@@ -18,6 +19,7 @@ const tableCandidates = {
 };
 
 const resolvedTables = new Map();
+const resolvedIdColumns = new Map();
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -126,12 +128,24 @@ function generateObjectId() {
   return `${timestamp}${random}`.slice(0, 24);
 }
 
-function withId(payload) {
-  if (payload[ID_COLUMN] !== undefined && payload[ID_COLUMN] !== null) {
-    return payload;
+function getIdColumnCandidates() {
+  return [...new Set([CONFIGURED_ID_COLUMN, '_id', 'id', 'row_id'].filter(Boolean))];
+}
+
+function isIdColumnReference(column) {
+  return getIdColumnCandidates().includes(column);
+}
+
+function withId(payload, idColumn) {
+  const explicitId = payload[idColumn] ?? payload._id ?? payload.id;
+  if (explicitId !== undefined && explicitId !== null) {
+    const nextPayload = { ...payload, [idColumn]: explicitId };
+    if (idColumn !== '_id') delete nextPayload._id;
+    if (idColumn !== 'id') delete nextPayload.id;
+    return nextPayload;
   }
 
-  if (ID_COLUMN === '_id') {
+  if (idColumn === '_id') {
     return { ...payload, _id: generateObjectId() };
   }
 
@@ -157,6 +171,42 @@ async function resolveTable(entity) {
   }
 
   throw new Error(`Unable to resolve Supabase table for "${entity}"${lastError ? `: ${lastError.message}` : ''}`);
+}
+
+async function resolveIdColumn(entity) {
+  if (resolvedIdColumns.has(entity)) {
+    return resolvedIdColumns.get(entity);
+  }
+
+  const table = await resolveTable(entity);
+  const client = getSupabaseAdmin();
+  let lastError = null;
+
+  for (const column of getIdColumnCandidates()) {
+    const { error } = await client.from(table).select(column).limit(1);
+    if (!error) {
+      resolvedIdColumns.set(entity, column);
+      return column;
+    }
+    lastError = error;
+  }
+
+  throw new Error(`Unable to resolve Supabase id column for "${entity}"${lastError ? `: ${lastError.message}` : ''}`);
+}
+
+async function normalizeFilters(entity, filters = []) {
+  if (!filters.length) {
+    return filters;
+  }
+
+  const idColumn = await resolveIdColumn(entity);
+  return filters.map((filter) => {
+    if (!filter || !filter.column || !isIdColumnReference(filter.column)) {
+      return filter;
+    }
+
+    return { ...filter, column: idColumn };
+  });
 }
 
 function applyFilters(query, filters = []) {
@@ -209,12 +259,16 @@ async function fetchMany(entity, options = {}) {
     limit,
   } = options;
 
-  const table = await resolveTable(entity);
+  const [table, idColumn, normalizedFilters] = await Promise.all([
+    resolveTable(entity),
+    resolveIdColumn(entity),
+    normalizeFilters(entity, filters),
+  ]);
   let query = getSupabaseAdmin().from(table).select(select);
-  query = applyFilters(query, filters);
+  query = applyFilters(query, normalizedFilters);
 
   if (orderBy) {
-    query = query.order(orderBy, { ascending });
+    query = query.order(isIdColumnReference(orderBy) ? idColumn : orderBy, { ascending });
   }
 
   if (limit) {
@@ -235,17 +289,18 @@ async function fetchOne(entity, options = {}) {
 }
 
 async function fetchById(entity, id, options = {}) {
+  const idColumn = await resolveIdColumn(entity);
   return fetchOne(entity, {
     ...options,
-    filters: [...(options.filters || []), { column: ID_COLUMN, operator: 'eq', value: id }],
+    filters: [...(options.filters || []), { column: idColumn, operator: 'eq', value: id }],
   });
 }
 
 async function insertRow(entity, payload, options = {}) {
   const { select = '*', timestamps = true } = options;
-  const table = await resolveTable(entity);
+  const [table, idColumn] = await Promise.all([resolveTable(entity), resolveIdColumn(entity)]);
   const basePayload = timestamps ? applyTimestamps(payload, { forInsert: true }) : { ...payload };
-  const record = preparePayload(withId(basePayload));
+  const record = preparePayload(withId(basePayload, idColumn));
   const { data, error } = await getSupabaseAdmin()
     .from(table)
     .insert(record)
@@ -261,13 +316,13 @@ async function insertRow(entity, payload, options = {}) {
 
 async function updateRow(entity, id, payload, options = {}) {
   const { select = '*', timestamps = true } = options;
-  const table = await resolveTable(entity);
+  const [table, idColumn] = await Promise.all([resolveTable(entity), resolveIdColumn(entity)]);
   const nextPayload = timestamps ? applyTimestamps(payload) : { ...payload };
   const record = preparePayload(nextPayload);
   const { data, error } = await getSupabaseAdmin()
     .from(table)
     .update(record)
-    .eq(ID_COLUMN, id)
+    .eq(idColumn, id)
     .select(select)
     .maybeSingle();
 
@@ -279,11 +334,11 @@ async function updateRow(entity, id, payload, options = {}) {
 }
 
 async function deleteRow(entity, id) {
-  const table = await resolveTable(entity);
+  const [table, idColumn] = await Promise.all([resolveTable(entity), resolveIdColumn(entity)]);
   const { data, error } = await getSupabaseAdmin()
     .from(table)
     .delete()
-    .eq(ID_COLUMN, id)
+    .eq(idColumn, id)
     .select('*')
     .maybeSingle();
 
@@ -295,9 +350,12 @@ async function deleteRow(entity, id) {
 }
 
 async function countRows(entity, filters = []) {
-  const table = await resolveTable(entity);
+  const [table, normalizedFilters] = await Promise.all([
+    resolveTable(entity),
+    normalizeFilters(entity, filters),
+  ]);
   let query = getSupabaseAdmin().from(table).select('*', { head: true, count: 'exact' });
-  query = applyFilters(query, filters);
+  query = applyFilters(query, normalizedFilters);
   const { count, error } = await query;
 
   if (error) {
@@ -337,6 +395,7 @@ module.exports = {
   insertRow,
   normalizeRow,
   preparePayload,
+  resolveIdColumn,
   resolveTable,
   uniqueIds,
   updateRow,
