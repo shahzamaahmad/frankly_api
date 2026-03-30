@@ -100,6 +100,27 @@ function uniqueValues(values = []) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function buildUsernameBase(value) {
+  const source = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  const normalized = source.replace(/[^a-z0-9._-]/g, '').replace(/^\.+|\.+$/g, '');
+  return normalized || 'user';
+}
+
+async function generateAvailableUsername(authUser) {
+  const metadataUsername = normalizeUsername(authUser?.user_metadata?.username);
+  const emailBase = buildUsernameBase(normalizeEmail(authUser?.email).split('@')[0]);
+  const baseUsername = buildUsernameBase(metadataUsername || emailBase);
+
+  let candidate = baseUsername;
+  let suffix = 1;
+  while (await findUserByColumn('username', candidate)) {
+    suffix += 1;
+    candidate = `${baseUsername}${suffix}`;
+  }
+
+  return candidate;
+}
+
 async function syncAuthLink(user, authUser) {
   if (!user || !authUser) {
     return user;
@@ -131,6 +152,35 @@ async function syncAuthLink(user, authUser) {
   return updateRow('users', user._id || user.id, updates);
 }
 
+async function createProfileFromAuthUser(authUser) {
+  if (!authUser?.email) {
+    return null;
+  }
+
+  const authLinkColumn = await getAuthLinkColumn();
+  const username = await generateAvailableUsername(authUser);
+  const payload = {
+    username,
+    email: normalizeEmail(authUser.email),
+    fullName: authUser.user_metadata?.fullName
+      || authUser.user_metadata?.full_name
+      || username,
+    role: authUser.user_metadata?.role || 'user',
+    phone: authUser.phone || null,
+    mobile: authUser.phone || null,
+    isActive: true,
+    permissions: mergePermissions(authUser.user_metadata?.permissions),
+    assets: [],
+    salaryCurrency: 'AED',
+  };
+
+  if (authLinkColumn) {
+    payload[authLinkColumn] = authUser.id;
+  }
+
+  return insertRow('users', payload);
+}
+
 async function findUserForAuthUser(authUser) {
   if (!authUser) {
     return null;
@@ -154,6 +204,10 @@ async function findUserForAuthUser(authUser) {
   if (!user && authUser.phone) {
     user = await findUserByColumn('phone', authUser.phone)
       || await findUserByColumn('mobile', authUser.phone);
+  }
+
+  if (!user) {
+    user = await createProfileFromAuthUser(authUser);
   }
 
   return syncAuthLink(user, authUser);
