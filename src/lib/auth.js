@@ -160,6 +160,7 @@ async function createProfileFromAuthUser(authUser) {
   const authLinkColumn = await getAuthLinkColumn();
   const username = await generateAvailableUsername(authUser);
   const payload = {
+    id: authUser.id,
     username,
     email: normalizeEmail(authUser.email),
     fullName: authUser.user_metadata?.fullName
@@ -233,6 +234,7 @@ async function createLinkedUserProfile(profile, authUser) {
   const authLinkColumn = await getAuthLinkColumn();
   const payload = {
     ...profile,
+    id: authUser?.id,
     email: authEmail || profile.email,
     phone: profile.phone || profile.mobile,
     fullName,
@@ -246,7 +248,6 @@ async function createLinkedUserProfile(profile, authUser) {
   delete payload.name;
   delete payload.mobile;
   delete payload.password;
-  delete payload.id;
   delete payload._id;
 
   if (authLinkColumn && authUser?.id) {
