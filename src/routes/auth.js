@@ -35,10 +35,10 @@ const { createLog } = require('../utils/logger');
  *           schema:
  *             type: object
  *             required:
- *               - username
+ *               - email
  *               - password
  *             properties:
- *               username:
+ *               email:
  *                 type: string
  *               password:
  *                 type: string
@@ -97,8 +97,8 @@ router.post('/generate-username', async (req, res) => {
 router.post('/signup', async (req, res) => {
   try {
     const userData = { ...req.body };
-    if (!userData.username || !userData.password) {
-      return res.status(400).json({ message: 'Username and password are required' });
+    if (!userData.username || !userData.email || !userData.password) {
+      return res.status(400).json({ message: 'Username, email, and password are required' });
     }
     if (userData.password.length < 6) {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
@@ -118,16 +118,17 @@ router.post('/signup', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
-    const identifier = username || email;
+    const { email, password } = req.body;
 
-    if (!identifier || !password) {
-      return res.status(400).json({ message: 'Username/email and password are required' });
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    const result = await signInWithPassword(identifier, password);
+    const result = await signInWithPassword(email, password);
     if (result.error) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      const message = result.error.message || 'Invalid credentials';
+      const status = /deactivated/i.test(message) ? 403 : 401;
+      return res.status(status).json({ message });
     }
     if (!result.user?.isActive) return res.status(403).json({ message: 'Account is deactivated' });
 

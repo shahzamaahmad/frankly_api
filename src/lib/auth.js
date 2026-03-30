@@ -225,33 +225,21 @@ async function verifyAccessToken(token) {
   return { authUser: data.user, user };
 }
 
-async function resolveLoginEmail(identifier) {
-  const input = typeof identifier === 'string' ? identifier.trim() : '';
-  if (!input) {
-    return '';
+async function signInWithPassword(email, password) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    return { error: { message: 'Email is required to sign in' } };
   }
 
-  if (input.includes('@')) {
-    return normalizeEmail(input);
+  const authUserProfile = await findUserByColumn('email', normalizedEmail);
+  if (authUserProfile && authUserProfile.isActive === false) {
+    return { error: new Error('Account is deactivated') };
   }
 
-  const user = await findUserByColumn('username', input);
-  if (user?.email) {
-    return normalizeEmail(user.email);
-  }
-
-  const fallbackDomain = getSupabaseFallbackEmailDomain();
-  return fallbackDomain ? buildAuthEmail({ username: input }) : '';
-}
-
-async function signInWithPassword(identifier, password) {
-  const email = await resolveLoginEmail(identifier);
-  if (!email) {
-    return { error: { message: 'This account needs an email to use Supabase Auth' } };
-  }
+  const emailToUse = normalizedEmail;
 
   const { data, error } = await getSupabaseAuth().auth.signInWithPassword({
-    email,
+    email: emailToUse,
     password,
   });
 
@@ -426,7 +414,6 @@ module.exports = {
   formatSessionPayload,
   refreshAccessToken,
   registerUser,
-  resolveLoginEmail,
   signInWithPassword,
   signOutSession,
   updateSupabaseUser,
