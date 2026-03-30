@@ -1,6 +1,6 @@
 const express = require('express');
 const axios = require('axios');
-const { ID_COLUMN, countRows, fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
+const { countRows, fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
 const { createLog } = require('../utils/logger');
 
 const router = express.Router();
@@ -14,12 +14,38 @@ async function fetchUserMap(ids) {
     return new Map();
   }
 
-  const users = await fetchMany('users', { filters: [{ column: ID_COLUMN, operator: 'in', value: userIds }] });
+  const users = await fetchMany('users', { filters: [{ column: 'id', operator: 'in', value: userIds }] });
   return indexById(users.map((user) => ({
-    _id: user._id,
+    id: user.id || user._id,
     fullName: user.fullName,
     username: user.username,
   })));
+}
+
+function normalizeAttendance(record, userMap = new Map()) {
+  if (!record) {
+    return null;
+  }
+
+  const user = record.userId ? (userMap.get(String(record.userId)) || record.userId) : record.userId;
+
+  return {
+    ...record,
+    user,
+    date: record.attendanceDate || record.date,
+    checkInLocation: {
+      latitude: record.checkInLatitude,
+      longitude: record.checkInLongitude,
+      address: record.checkInAddress,
+    },
+    checkOutLocation: record.checkOut || record.checkOutLatitude || record.checkOutLongitude || record.checkOutAddress
+      ? {
+        latitude: record.checkOutLatitude,
+        longitude: record.checkOutLongitude,
+        address: record.checkOutAddress,
+      }
+      : null,
+  };
 }
 
 async function populateAttendances(records) {
@@ -27,11 +53,8 @@ async function populateAttendances(records) {
     return [];
   }
 
-  const userMap = await fetchUserMap(records.map((record) => record.user));
-  return records.map((record) => ({
-    ...record,
-    user: record.user ? (userMap.get(String(record.user)) || record.user) : record.user,
-  }));
+  const userMap = await fetchUserMap(records.map((record) => record.userId));
+  return records.map((record) => normalizeAttendance(record, userMap));
 }
 
 async function populateAttendance(record) {
@@ -70,43 +93,6 @@ async function sendAttendanceNotification(targetUserId, title, message) {
   }
 }
 
-/**
- * @swagger
- * tags:
- *   name: Attendance
- *   description: Attendance tracking
- */
-
-/**
- * @swagger
- * /attendance/checkin:
- *   post:
- *     summary: Check in
- *     tags: [Attendance]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - latitude
- *               - longitude
- *               - address
- *             properties:
- *               latitude:
- *                 type: number
- *               longitude:
- *                 type: number
- *               address:
- *                 type: string
- *     responses:
- *       201:
- *         description: Checked in successfully
- */
-
 router.post('/checkin', async (req, res) => {
   try {
     const { latitude, longitude, address, userId } = req.body;
@@ -126,7 +112,7 @@ router.post('/checkin', async (req, res) => {
 
     const openAttendances = await fetchMany('attendance', {
       filters: [
-        { column: 'user', operator: 'eq', value: targetUserId },
+        { column: 'userId', operator: 'eq', value: targetUserId },
         { column: 'checkOut', operator: 'is', value: null },
       ],
       orderBy: 'checkIn',
@@ -140,9 +126,11 @@ router.post('/checkin', async (req, res) => {
     }
 
     if (openAttendance && userId && req.user.permissions?.approveAttendance) {
-      const checkedOut = await updateRow('attendance', openAttendance._id, {
+      const checkedOut = await updateRow('attendance', openAttendance.id || openAttendance._id, {
         checkOut: getDubaiTime().toISOString(),
-        checkOutLocation: { latitude, longitude, address },
+        checkOutLatitude: latitude,
+        checkOutLongitude: longitude,
+        checkOutAddress: address,
         workingHours: calculateWorkingSeconds(openAttendance.checkIn, getDubaiTime()),
       });
 
@@ -156,24 +144,25 @@ router.post('/checkin', async (req, res) => {
         `You have been checked out by ${req.user.fullName || req.user.username}`
       );
 
-      if (global.io) global.io.emit('attendance:checkout', checkedOut);
-      return res.json(checkedOut);
+      if (global.io) global.io.emit('attendance:checkout', await populateAttendance(checkedOut));
+      return res.json(await populateAttendance(checkedOut));
     }
 
     const sessionNumber = (await countRows('attendance', [
-      { column: 'user', operator: 'eq', value: targetUserId },
-      { column: 'date', operator: 'eq', value: recordDate },
+      { column: 'userId', operator: 'eq', value: targetUserId },
+      { column: 'attendanceDate', operator: 'eq', value: recordDate },
     ])) + 1;
 
     const attendance = await insertRow('attendance', {
-      user: targetUserId,
+      userId: targetUserId,
+      userName: userId && req.user.permissions?.approveAttendance ? undefined : (req.user.fullName || req.user.username),
       checkIn: recordCheckIn.toISOString(),
-      checkInLocation: { latitude, longitude, address },
-      date: recordDate,
+      checkInLatitude: latitude,
+      checkInLongitude: longitude,
+      checkInAddress: address,
+      attendanceDate: recordDate,
       sessionNumber,
       approvalStatus: userId && req.user.permissions?.approveAttendance ? 'approved' : 'pending',
-      approvedBy: userId && req.user.permissions?.approveAttendance ? req.user.id : null,
-      approvedAt: userId && req.user.permissions?.approveAttendance ? getDubaiTime().toISOString() : null,
       workingHours: 0,
     });
 
@@ -219,7 +208,9 @@ router.put('/checkout/:id', async (req, res) => {
 
     const updated = await updateRow('attendance', req.params.id, {
       checkOut: recordCheckOut.toISOString(),
-      checkOutLocation: { latitude, longitude, address },
+      checkOutLatitude: latitude,
+      checkOutLongitude: longitude,
+      checkOutAddress: address,
       workingHours,
     });
 
@@ -232,8 +223,9 @@ router.put('/checkout/:id', async (req, res) => {
       console.error('Log failed:', error);
     });
 
-    if (global.io) global.io.emit('attendance:checkout', updated);
-    res.json(updated);
+    const populated = await populateAttendance(updated);
+    if (global.io) global.io.emit('attendance:checkout', populated);
+    res.json(populated);
   } catch (error) {
     console.error('Check-out error:', error.message, error.stack);
     res.status(500).json({ message: 'Internal server error', error: error.message });
@@ -247,8 +239,8 @@ router.get('/', async (req, res) => {
     }
 
     const filters = [];
-    if (req.query.date && typeof req.query.date === 'string') filters.push({ column: 'date', operator: 'eq', value: req.query.date });
-    if (req.query.userId && typeof req.query.userId === 'string') filters.push({ column: 'user', operator: 'eq', value: req.query.userId });
+    if (req.query.date && typeof req.query.date === 'string') filters.push({ column: 'attendanceDate', operator: 'eq', value: req.query.date });
+    if (req.query.userId && typeof req.query.userId === 'string') filters.push({ column: 'userId', operator: 'eq', value: req.query.userId });
 
     const records = await fetchMany('attendance', {
       filters,
@@ -269,8 +261,8 @@ router.get('/today', async (req, res) => {
 
     const records = await fetchMany('attendance', {
       filters: [
-        { column: 'date', operator: 'eq', value: date },
-        { column: 'user', operator: 'eq', value: req.user.id },
+        { column: 'attendanceDate', operator: 'eq', value: date },
+        { column: 'userId', operator: 'eq', value: req.user.id },
       ],
       orderBy: 'checkIn',
       ascending: false,
@@ -311,22 +303,23 @@ router.get('/monthly-report', async (req, res) => {
 
     const records = await fetchMany('attendance', {
       filters: [
-        { column: 'user', operator: 'eq', value: userId },
-        { column: 'date', operator: 'gte', value: startDate.toISOString().split('T')[0] },
-        { column: 'date', operator: 'lte', value: endDate.toISOString().split('T')[0] },
+        { column: 'userId', operator: 'eq', value: userId },
+        { column: 'attendanceDate', operator: 'gte', value: startDate.toISOString().split('T')[0] },
+        { column: 'attendanceDate', operator: 'lte', value: endDate.toISOString().split('T')[0] },
         { column: 'approvalStatus', operator: 'eq', value: 'approved' },
       ],
-      orderBy: 'date',
+      orderBy: 'attendanceDate',
       ascending: true,
     });
 
     const dailyRecords = {};
     for (const record of records) {
-      if (!dailyRecords[record.date]) {
-        dailyRecords[record.date] = { sessions: [], totalWorkingHours: 0 };
+      const recordDate = record.attendanceDate || record.date;
+      if (!dailyRecords[recordDate]) {
+        dailyRecords[recordDate] = { sessions: [], totalWorkingHours: 0 };
       }
-      dailyRecords[record.date].sessions.push(record);
-      dailyRecords[record.date].totalWorkingHours += Number(record.workingHours || 0);
+      dailyRecords[recordDate].sessions.push(normalizeAttendance(record));
+      dailyRecords[recordDate].totalWorkingHours += Number(record.workingHours || 0);
     }
 
     const report = [];
@@ -388,7 +381,7 @@ router.put('/:id', async (req, res) => {
     createLog('EDIT_ATTENDANCE', req.user.id, req.user.username, 'Edited attendance record').catch((error) => {
       console.error('Log failed:', error);
     });
-    res.json(updated);
+    res.json(await populateAttendance(updated));
   } catch (error) {
     console.error('Update attendance error:', error.message, error.stack);
     res.status(500).json({ message: 'Internal server error', error: error.message });
@@ -462,9 +455,6 @@ router.put('/:id/approve', async (req, res) => {
 
     const updated = await updateRow('attendance', req.params.id, {
       approvalStatus: 'approved',
-      approvedBy: req.user.id,
-      approvedAt: getDubaiTime().toISOString(),
-      rejectionReason: null,
     });
 
     const populated = await populateAttendance(updated);
@@ -498,9 +488,6 @@ router.put('/:id/reject', async (req, res) => {
 
     const updated = await updateRow('attendance', req.params.id, {
       approvalStatus: 'rejected',
-      approvedBy: req.user.id,
-      approvedAt: getDubaiTime().toISOString(),
-      rejectionReason: req.body.reason,
     });
 
     const populated = await populateAttendance(updated);

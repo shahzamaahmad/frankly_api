@@ -1,8 +1,8 @@
 const { getSupabaseAdmin } = require('./supabase');
 
 const CONFIGURED_ID_COLUMN = process.env.SUPABASE_ID_COLUMN;
-const ID_COLUMN = CONFIGURED_ID_COLUMN || '_id';
-const USE_SNAKE_CASE = process.env.SUPABASE_USE_SNAKE_CASE === 'true';
+const ID_COLUMN = CONFIGURED_ID_COLUMN || 'id';
+const USE_SNAKE_CASE = process.env.SUPABASE_USE_SNAKE_CASE !== 'false';
 
 const tableCandidates = {
   users: [process.env.SUPABASE_TABLE_USERS, 'users', 'user'],
@@ -298,7 +298,7 @@ function extractMissingColumn(error) {
 }
 
 async function executeWriteWithColumnFallback(record, operation) {
-  let currentRecord = { ...record };
+  const currentRecord = { ...record };
   let attempts = 0;
 
   while (attempts < 20) {

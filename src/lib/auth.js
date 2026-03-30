@@ -57,6 +57,49 @@ async function getAuthLinkColumn() {
   return null;
 }
 
+async function listAuthUsers() {
+  const { data, error } = await getSupabaseAdmin().auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data?.users || [];
+}
+
+async function findAuthUserIdForLocalUser(localUser) {
+  const linkedUserId = localUser?.authUserId || localUser?.auth_user_id || localUser?.supabaseAuthId || localUser?.supabase_auth_id;
+  if (linkedUserId) {
+    return linkedUserId;
+  }
+
+  const candidateEmails = uniqueValues([
+    normalizeEmail(localUser?.email),
+    buildAuthEmail(localUser),
+  ]);
+
+  if (!candidateEmails.length && !localUser?.username) {
+    return '';
+  }
+
+  const users = await listAuthUsers();
+  const matched = users.find((authUser) => {
+    const authEmail = normalizeEmail(authUser.email);
+    const metadataUsername = normalizeUsername(authUser.user_metadata?.username);
+    return candidateEmails.includes(authEmail)
+      || (localUser?.username && metadataUsername === normalizeUsername(localUser.username));
+  });
+
+  return matched?.id || '';
+}
+
+function uniqueValues(values = []) {
+  return [...new Set(values.filter(Boolean))];
+}
+
 async function syncAuthLink(user, authUser) {
   if (!user || !authUser) {
     return user;
@@ -302,7 +345,7 @@ async function registerUser(profile) {
 }
 
 async function updateSupabaseUser(localUser, updates = {}) {
-  const authUserId = localUser?.authUserId || localUser?.auth_user_id || localUser?.supabaseAuthId || localUser?.supabase_auth_id;
+  const authUserId = await findAuthUserIdForLocalUser(localUser);
   if (!authUserId) {
     if (updates.password || updates.email) {
       throw new Error('This user is not linked to a Supabase auth account yet');
@@ -345,7 +388,7 @@ async function updateSupabaseUser(localUser, updates = {}) {
 }
 
 async function deleteSupabaseUser(localUser) {
-  const authUserId = localUser?.authUserId || localUser?.auth_user_id || localUser?.supabaseAuthId || localUser?.supabase_auth_id;
+  const authUserId = await findAuthUserIdForLocalUser(localUser);
   if (!authUserId) {
     return;
   }

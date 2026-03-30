@@ -13,11 +13,11 @@ router.get('/', async (req, res) => {
     const limit = Number.parseInt(req.query.limit, 10) || 500;
     const filters = user.role === 'admin'
       ? []
-      : [{ column: 'userId', operator: 'eq', value: req.user.id }];
+      : [{ column: 'itemId', operator: 'eq', value: req.user.id }];
 
-    const logs = await fetchMany('logs', {
+    const logs = await fetchMany('activities', {
       filters,
-      orderBy: 'timestamp',
+      orderBy: 'createdAt',
       ascending: false,
       limit,
     });

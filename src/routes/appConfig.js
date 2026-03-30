@@ -1,5 +1,6 @@
 const express = require('express');
 const { fetchMany, insertRow } = require('../lib/db');
+const { getSupabaseAdmin } = require('../lib/supabase');
 
 const router = express.Router();
 
@@ -54,7 +55,25 @@ router.get('/', async (req, res) => {
       config = await insertRow('appConfig', defaultAppConfig());
     }
 
-    res.json(config);
+    const { data: faqs, error } = await getSupabaseAdmin()
+      .from('app_config_faqs')
+      .select('*')
+      .eq('app_config_id', config.id || config._id)
+      .order('sort_order', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      ...config,
+      faqs: (faqs || []).map((faq) => ({
+        id: faq.id,
+        question: faq.question,
+        answer: faq.answer,
+        sortOrder: faq.sort_order,
+      })),
+    });
   } catch (err) {
     console.error('Get app config error:', err);
     res.status(500).json({ error: 'Internal server error' });

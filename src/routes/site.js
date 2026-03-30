@@ -26,29 +26,84 @@ async function populateSite(site) {
     return null;
   }
 
-  const userMap = await fetchUserSummaries([site.engineer, site.siteManager, site.safetyOfficer]);
+  const userMap = await fetchUserSummaries([site.engineerId]);
 
   return {
     ...site,
-    engineer: site.engineer ? (userMap.get(String(site.engineer)) || site.engineer) : site.engineer,
-    siteManager: site.siteManager ? (userMap.get(String(site.siteManager)) || site.siteManager) : site.siteManager,
-    safetyOfficer: site.safetyOfficer ? (userMap.get(String(site.safetyOfficer)) || site.safetyOfficer) : site.safetyOfficer,
+    client: site.clientName ? { name: site.clientName } : null,
+    projectValue: site.projectValue !== undefined || site.projectCurrency
+      ? { amount: site.projectValue, currency: site.projectCurrency }
+      : null,
+    workingHours: site.workingHoursStart || site.workingHoursEnd
+      ? { start: site.workingHoursStart, end: site.workingHoursEnd }
+      : null,
+    engineer: site.engineerId ? (userMap.get(String(site.engineerId)) || site.engineerId) : site.engineerId,
+    siteManager: null,
+    safetyOfficer: null,
   };
 }
 
 async function populateSites(sites) {
-  const ids = uniqueIds(
-    sites.flatMap((site) => [site.engineer, site.siteManager, site.safetyOfficer])
-  );
+  const ids = uniqueIds(sites.map((site) => site.engineerId));
 
   const userMap = await fetchUserSummaries(ids);
 
   return sites.map((site) => ({
     ...site,
-    engineer: site.engineer ? (userMap.get(String(site.engineer)) || site.engineer) : site.engineer,
-    siteManager: site.siteManager ? (userMap.get(String(site.siteManager)) || site.siteManager) : site.siteManager,
-    safetyOfficer: site.safetyOfficer ? (userMap.get(String(site.safetyOfficer)) || site.safetyOfficer) : site.safetyOfficer,
+    client: site.clientName ? { name: site.clientName } : null,
+    projectValue: site.projectValue !== undefined || site.projectCurrency
+      ? { amount: site.projectValue, currency: site.projectCurrency }
+      : null,
+    workingHours: site.workingHoursStart || site.workingHoursEnd
+      ? { start: site.workingHoursStart, end: site.workingHoursEnd }
+      : null,
+    engineer: site.engineerId ? (userMap.get(String(site.engineerId)) || site.engineerId) : site.engineerId,
+    siteManager: null,
+    safetyOfficer: null,
   }));
+}
+
+function normalizeSitePayload(body) {
+  const payload = { ...body };
+
+  if (payload.client && !payload.clientName) {
+    payload.clientName = typeof payload.client === 'string' ? payload.client : payload.client.name;
+  }
+
+  if (payload.projectValue && typeof payload.projectValue === 'object') {
+    if (payload.projectValue.amount !== undefined && payload.projectValue.amount !== null && payload.projectValue.amount !== '') {
+      payload.projectValue = Number(payload.projectValue.amount);
+    } else {
+      delete payload.projectValue;
+    }
+
+    if (payload.projectValue?.currency || body.projectValue?.currency) {
+      payload.projectCurrency = body.projectValue.currency;
+    }
+  } else if (payload.projectValue !== undefined && payload.projectValue !== null && payload.projectValue !== '') {
+    payload.projectValue = Number(payload.projectValue);
+  }
+
+  if (payload.workingHours && typeof payload.workingHours === 'object') {
+    payload.workingHoursStart = payload.workingHours.start;
+    payload.workingHoursEnd = payload.workingHours.end;
+  }
+
+  if (payload.engineer && !payload.engineerId) {
+    payload.engineerId = typeof payload.engineer === 'object'
+      ? (payload.engineer.id || payload.engineer._id)
+      : payload.engineer;
+  }
+
+  delete payload.client;
+  delete payload.workingHours;
+  delete payload.engineer;
+  delete payload.siteManager;
+  delete payload.safetyOfficer;
+  delete payload.createdAt;
+  delete payload.updatedAt;
+
+  return payload;
 }
 
 router.post('/', checkPermission('addSites'), async (req, res) => {
@@ -57,14 +112,10 @@ router.post('/', checkPermission('addSites'), async (req, res) => {
       return res.status(400).json({ error: 'Site code and name are required' });
     }
 
-    const now = new Date().toISOString();
-    const site = await insertRow('sites', {
-      ...req.body,
-      createdAt: req.body.createdAt || now,
-      updatedAt: now,
-    }, { timestamps: false });
-    if (global.io) global.io.emit('site:created', site);
-    res.status(201).json(site);
+    const site = await insertRow('sites', normalizeSitePayload(req.body));
+    const populated = await populateSite(site);
+    if (global.io) global.io.emit('site:created', populated);
+    res.status(201).json(populated);
   } catch (err) {
     console.error('Create site error:', err);
     res.status(400).json({ error: 'Failed to create site' });
@@ -94,15 +145,11 @@ router.get('/:id', checkPermission('viewSites'), async (req, res) => {
 
 router.put('/:id', checkPermission('editSites'), async (req, res) => {
   try {
-    const updates = { ...req.body };
+    const updates = normalizeSitePayload(req.body);
     delete updates._id;
     delete updates.id;
-    delete updates.createdAt;
 
-    const updated = await updateRow('sites', req.params.id, {
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    }, { timestamps: false });
+    const updated = await updateRow('sites', req.params.id, updates);
     if (!updated) return res.status(404).json({ error: 'Site not found' });
 
     const populated = await populateSite(updated);

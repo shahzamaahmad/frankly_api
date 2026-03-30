@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { fetchById, fetchMany, deleteRow, insertRow, updateRow } = require('../lib/db');
+const { getSupabaseAdmin } = require('../lib/supabase');
 const { createLog } = require('../utils/logger');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
@@ -40,15 +41,20 @@ function normalizeInventoryPayload(body) {
   delete payload.imageBase64;
   delete payload.imageContentType;
 
+  if (payload.barcode && !payload.sku) {
+    payload.sku = payload.barcode;
+  }
+
+  if (payload.certification?.safetyStandards && !payload.safetyStandards) {
+    payload.safetyStandards = payload.certification.safetyStandards;
+  }
+
+  delete payload.certification;
+  delete payload.barcode;
+
   const numericFields = [
     'initialStock',
     'currentStock',
-    'unitCost',
-    'weightKg',
-    'warrantyMonths',
-    'expectedLifespanMonths',
-    'reorderLevel',
-    'maxStockLevel',
   ];
 
   for (const field of numericFields) {
@@ -192,7 +198,7 @@ router.get('/', checkPermission('viewInventory'), async (req, res) => {
 router.get('/barcode/:barcode', checkPermission('viewInventory'), async (req, res) => {
   try {
     const inventory = await fetchMany('inventory', {
-      filters: [{ column: 'barcode', operator: 'eq', value: req.params.barcode }],
+      filters: [{ column: 'sku', operator: 'eq', value: req.params.barcode }],
       limit: 1,
     });
     const item = inventory[0];
@@ -313,9 +319,20 @@ router.post('/:id/recalculate', checkPermission('editInventory'), async (req, re
     const item = await fetchById('inventory', req.params.id);
     if (!item) return res.status(404).json({ error: 'Item not found' });
 
-    const [transactions, deliveries, users] = await Promise.all([
-      fetchMany('transactions', { filters: [{ column: 'item', operator: 'eq', value: req.params.id }] }),
-      fetchMany('deliveries'),
+    const [transactions, deliveryItems, users] = await Promise.all([
+      fetchMany('transactions', { filters: [{ column: 'inventoryId', operator: 'eq', value: req.params.id }] }),
+      (async () => {
+        const { data, error } = await getSupabaseAdmin()
+          .from('delivery_items')
+          .select('inventory_id, quantity')
+          .eq('inventory_id', req.params.id);
+
+        if (error) {
+          throw error;
+        }
+
+        return data || [];
+      })(),
       fetchMany('users'),
     ]);
 
@@ -329,16 +346,8 @@ router.post('/:id/recalculate', checkPermission('editInventory'), async (req, re
       else if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
     }
 
-    for (const delivery of deliveries) {
-      for (const deliveryItem of delivery.items || []) {
-        const deliveryItemId = typeof deliveryItem.itemName === 'object'
-          ? (deliveryItem.itemName?._id || deliveryItem.itemName?.id)
-          : deliveryItem.itemName;
-
-        if (String(deliveryItemId) === req.params.id) {
-          totalDelivered += Number(deliveryItem.quantity || 0);
-        }
-      }
+    for (const deliveryItem of deliveryItems) {
+      totalDelivered += Number(deliveryItem.quantity || 0);
     }
 
     for (const user of users) {

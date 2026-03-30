@@ -3,13 +3,15 @@ const { insertRow } = require('../lib/db');
 async function createLog(action, userId, username, details = '') {
   try {
     await insertRow(
-      'logs',
+      'activities',
       {
         action,
-        userId,
-        username,
+        itemType: 'system',
+        itemId: userId || null,
+        itemName: username || null,
         details,
-        timestamp: new Date().toISOString(),
+        userName: username || null,
+        createdAt: new Date().toISOString(),
       },
       { timestamps: false }
     );

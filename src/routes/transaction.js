@@ -1,5 +1,5 @@
 const express = require('express');
-const { ID_COLUMN, fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
+const { fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
 const checkPermission = require('../middlewares/checkPermission');
 const { createLog } = require('../utils/logger');
 
@@ -12,38 +12,32 @@ async function populateTransactions(transactions) {
     return [];
   }
 
-  const employeeIds = uniqueIds(transactions.map((transaction) => transaction.employee));
-  const siteIds = uniqueIds(transactions.map((transaction) => transaction.site));
-  const itemIds = uniqueIds(transactions.map((transaction) => transaction.item));
+  const siteIds = uniqueIds(transactions.map((transaction) => transaction.siteId));
+  const itemIds = uniqueIds(transactions.map((transaction) => transaction.inventoryId));
 
-  const [employees, sites, items] = await Promise.all([
-    employeeIds.length ? fetchMany('users', { filters: [{ column: ID_COLUMN, operator: 'in', value: employeeIds }] }) : [],
-    siteIds.length ? fetchMany('sites', { filters: [{ column: ID_COLUMN, operator: 'in', value: siteIds }] }) : [],
-    itemIds.length ? fetchMany('inventory', { filters: [{ column: ID_COLUMN, operator: 'in', value: itemIds }] }) : [],
+  const [sites, items] = await Promise.all([
+    siteIds.length ? fetchMany('sites', { filters: [{ column: 'id', operator: 'in', value: siteIds }] }) : [],
+    itemIds.length ? fetchMany('inventory', { filters: [{ column: 'id', operator: 'in', value: itemIds }] }) : [],
   ]);
 
-  const employeeMap = indexById(employees.map((employee) => ({
-    _id: employee._id,
-    fullName: employee.fullName,
-    username: employee.username,
-    email: employee.email,
-  })));
   const siteMap = indexById(sites.map((site) => ({
-    _id: site._id,
+    id: site.id || site._id,
     siteName: site.siteName,
     siteCode: site.siteCode,
   })));
   const itemMap = indexById(items.map((item) => ({
-    _id: item._id,
+    id: item.id || item._id,
     name: item.name,
     sku: item.sku,
   })));
 
   return transactions.map((transaction) => ({
     ...transaction,
-    employee: transaction.employee ? (employeeMap.get(String(transaction.employee)) || transaction.employee) : transaction.employee,
-    site: transaction.site ? (siteMap.get(String(transaction.site)) || transaction.site) : transaction.site,
-    item: transaction.item ? (itemMap.get(String(transaction.item)) || transaction.item) : transaction.item,
+    employee: transaction.employee || null,
+    site: transaction.siteId ? (siteMap.get(String(transaction.siteId)) || transaction.siteId) : transaction.siteId,
+    item: transaction.inventoryId ? (itemMap.get(String(transaction.inventoryId)) || transaction.inventoryId) : transaction.inventoryId,
+    timestamp: transaction.eventTimestamp || transaction.timestamp,
+    returnDetails: transaction.returnCondition ? { condition: transaction.returnCondition } : null,
   }));
 }
 
@@ -103,12 +97,12 @@ async function applyTransactionStock(itemId, quantity, type, reverse = false) {
 router.get('/', checkPermission('viewTransactions'), async (req, res) => {
   try {
     const filters = [];
-    if (req.query.site && typeof req.query.site === 'string') filters.push({ column: 'site', operator: 'eq', value: req.query.site });
-    if (req.query.item && typeof req.query.item === 'string') filters.push({ column: 'item', operator: 'eq', value: req.query.item });
+    if (req.query.site && typeof req.query.site === 'string') filters.push({ column: 'siteId', operator: 'eq', value: req.query.site });
+    if (req.query.item && typeof req.query.item === 'string') filters.push({ column: 'inventoryId', operator: 'eq', value: req.query.item });
 
     const transactions = await fetchMany('transactions', {
       filters,
-      orderBy: 'timestamp',
+      orderBy: 'eventTimestamp',
       ascending: false,
     });
 
@@ -132,7 +126,7 @@ router.get('/:id', checkPermission('viewTransactions'), async (req, res) => {
 
 router.post('/', checkPermission('addTransactions'), async (req, res) => {
   try {
-    const { type, employee, site, item, quantity, returnDetails, relatedTo, timestamp } = req.body;
+    const { type, site, item, quantity, returnDetails, timestamp } = req.body;
 
     if (!type || !site || !item || !quantity || Number(quantity) <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
@@ -144,15 +138,12 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
     const transaction = await insertRow('transactions', {
       transactionId,
       type,
-      employee: employee || null,
-      site,
-      item,
+      siteId: site,
+      inventoryId: item,
       quantity: Number(quantity),
-      returnDetails,
-      relatedTo,
-      timestamp: createdTimestamp,
-      createdAt: createdTimestamp,
-    }, { timestamps: false });
+      returnCondition: returnDetails?.condition || null,
+      eventTimestamp: createdTimestamp,
+    });
 
     const populated = await populateTransaction(transaction);
 
@@ -173,24 +164,22 @@ router.put('/:id', checkPermission('editTransactions'), async (req, res) => {
     const transaction = await fetchById('transactions', req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
-    const { type, employee, site, item, quantity, returnDetails, relatedTo } = req.body;
+    const { type, site, item, quantity, returnDetails } = req.body;
 
     if (!type || !site || !item || !quantity || Number(quantity) <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
     }
 
-    await applyTransactionStock(transaction.item, transaction.quantity, transaction.type, true);
+    await applyTransactionStock(transaction.inventoryId, transaction.quantity, transaction.type, true);
     await applyTransactionStock(item, quantity, type);
 
     const updated = await updateRow('transactions', req.params.id, {
       type,
-      employee: employee || null,
-      site,
-      item,
+      siteId: site,
+      inventoryId: item,
       quantity: Number(quantity),
-      returnDetails,
-      relatedTo,
-    }, { timestamps: false });
+      returnCondition: returnDetails?.condition || null,
+    });
 
     const populated = await populateTransaction(updated);
 
@@ -211,7 +200,7 @@ router.delete('/:id', checkPermission('deleteTransactions'), async (req, res) =>
     const transaction = await fetchById('transactions', req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
-    await applyTransactionStock(transaction.item, transaction.quantity, transaction.type, true);
+    await applyTransactionStock(transaction.inventoryId, transaction.quantity, transaction.type, true);
     await deleteRow('transactions', req.params.id);
 
     await createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`);

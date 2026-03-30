@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
-const { ID_COLUMN, fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
+const { fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
+const { getSupabaseAdmin } = require('../lib/supabase');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
 const { createLog } = require('../utils/logger');
@@ -21,6 +22,18 @@ const upload = multer({
   }
 });
 
+function readItemId(item) {
+  if (!item) {
+    return null;
+  }
+
+  if (typeof item.itemName === 'object') {
+    return item.itemName.id || item.itemName._id || null;
+  }
+
+  return item.itemName || item.inventoryId || item.itemId || item.id || null;
+}
+
 function normalizeItems(items) {
   const source = typeof items === 'string' ? JSON.parse(items) : items;
   if (!Array.isArray(source)) {
@@ -28,12 +41,11 @@ function normalizeItems(items) {
   }
 
   return source
-    .filter((item) => item && item.itemName)
     .map((item) => ({
-      itemName: typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName,
-      quantity: Number(item.quantity || 0),
+      inventoryId: readItemId(item),
+      quantity: Number(item?.quantity || 0),
     }))
-    .filter((item) => item.quantity > 0);
+    .filter((item) => item.inventoryId && item.quantity > 0);
 }
 
 async function uploadInvoice(req, body) {
@@ -76,28 +88,79 @@ async function generateDeliveryId() {
   return `${prefix}${String(nextNum).padStart(4, '0')}`;
 }
 
+async function fetchDeliveryItemsByDeliveryIds(deliveryIds) {
+  const ids = uniqueIds(deliveryIds);
+  if (!ids.length) {
+    return [];
+  }
+
+  const { data, error } = await getSupabaseAdmin()
+    .from('delivery_items')
+    .select('*')
+    .in('delivery_id', ids);
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
+}
+
+async function syncDeliveryItems(deliveryId, items) {
+  const client = getSupabaseAdmin();
+  const { error: deleteError } = await client
+    .from('delivery_items')
+    .delete()
+    .eq('delivery_id', deliveryId);
+
+  if (deleteError) {
+    throw deleteError;
+  }
+
+  if (!items.length) {
+    return;
+  }
+
+  const payload = items.map((item) => ({
+    delivery_id: deliveryId,
+    inventory_id: item.inventoryId,
+    quantity: item.quantity,
+  }));
+
+  const { error: insertError } = await client.from('delivery_items').insert(payload);
+  if (insertError) {
+    throw insertError;
+  }
+}
+
 async function recalculateInventoryStock(itemId) {
   const inventory = await fetchById('inventory', itemId);
   if (!inventory) {
     return;
   }
 
-  const [transactions, deliveries] = await Promise.all([
-    fetchMany('transactions', { filters: [{ column: 'item', operator: 'eq', value: itemId }] }),
-    fetchMany('deliveries'),
+  const [transactions, deliveryItems] = await Promise.all([
+    fetchMany('transactions', { filters: [{ column: 'inventoryId', operator: 'eq', value: itemId }] }),
+    (async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from('delivery_items')
+        .select('quantity')
+        .eq('inventory_id', itemId);
+
+      if (error) {
+        throw error;
+      }
+
+      return data || [];
+    })(),
   ]);
 
   let totalDelivered = 0;
   let totalIssued = 0;
   let totalReturned = 0;
 
-  for (const delivery of deliveries) {
-    for (const item of delivery.items || []) {
-      const deliveryItemId = typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName;
-      if (String(deliveryItemId) === String(itemId)) {
-        totalDelivered += Number(item.quantity || 0);
-      }
-    }
+  for (const item of deliveryItems) {
+    totalDelivered += Number(item.quantity || 0);
   }
 
   for (const transaction of transactions) {
@@ -120,31 +183,36 @@ async function populateDeliveries(deliveries) {
     return [];
   }
 
-  const inventoryIds = uniqueIds(
-    deliveries.flatMap((delivery) => (delivery.items || []).map((item) => (
-      typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName
-    )))
-  );
+  const deliveryItems = await fetchDeliveryItemsByDeliveryIds(deliveries.map((delivery) => delivery.id || delivery._id));
+  const itemsByDeliveryId = new Map();
 
+  for (const item of deliveryItems) {
+    const deliveryId = String(item.delivery_id);
+    const current = itemsByDeliveryId.get(deliveryId) || [];
+    current.push(item);
+    itemsByDeliveryId.set(deliveryId, current);
+  }
+
+  const inventoryIds = uniqueIds(deliveryItems.map((item) => item.inventory_id));
   const inventory = inventoryIds.length
-    ? await fetchMany('inventory', { filters: [{ column: ID_COLUMN, operator: 'in', value: inventoryIds }] })
+    ? await fetchMany('inventory', { filters: [{ column: 'id', operator: 'in', value: inventoryIds }] })
     : [];
   const inventoryMap = indexById(inventory.map((item) => ({
-    _id: item._id,
+    id: item.id || item._id,
     name: item.name,
     sku: item.sku,
   })));
 
-  return deliveries.map((delivery) => ({
-    ...delivery,
-    items: (delivery.items || []).map((item) => {
-      const itemId = typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName;
-      return {
-        ...item,
-        itemName: itemId ? (inventoryMap.get(String(itemId)) || item.itemName) : item.itemName,
-      };
-    }),
-  }));
+  return deliveries.map((delivery) => {
+    const currentItems = itemsByDeliveryId.get(String(delivery.id || delivery._id)) || [];
+    return {
+      ...delivery,
+      items: currentItems.map((item) => ({
+        itemName: inventoryMap.get(String(item.inventory_id)) || item.inventory_id,
+        quantity: Number(item.quantity || 0),
+      })),
+    };
+  });
 }
 
 async function populateDelivery(delivery) {
@@ -167,22 +235,25 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
 
     await uploadInvoice(req, body);
 
-    body.items = normalizeItems(body.items);
+    const items = normalizeItems(body.items);
     body.amount = body.amount !== undefined && body.amount !== '' ? Number(body.amount) : body.amount;
     body.deliveryId = await generateDeliveryId();
 
+    delete body.items;
     delete body.invoiceBase64;
     delete body.invoiceContentType;
     delete body.invoiceFilename;
 
     const delivery = await insertRow('deliveries', body);
-    await recalculateInventoryStocks(body.items.map((item) => item.itemName));
+    await syncDeliveryItems(delivery.id || delivery._id, items);
+    await recalculateInventoryStocks(items.map((item) => item.inventoryId));
 
-    await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${delivery.deliveryId || delivery._id}`);
+    const populated = await populateDelivery(delivery);
+    await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${delivery.deliveryId || delivery.id}`);
     if (global.io) {
-      global.io.emit('delivery:created', delivery);
+      global.io.emit('delivery:created', populated);
     }
-    res.status(201).json(delivery);
+    res.status(201).json(populated);
   } catch (err) {
     console.error('Create delivery error:', err);
     res.status(400).json({ error: 'Failed to create delivery' });
@@ -218,7 +289,7 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
 }, async (req, res) => {
   try {
     const body = { ...req.body };
-    const existingDelivery = await fetchById('deliveries', req.params.id);
+    const existingDelivery = await populateDelivery(await fetchById('deliveries', req.params.id));
     if (!existingDelivery) return res.status(404).json({ error: 'Delivery not found' });
 
     await uploadInvoice(req, body);
@@ -227,9 +298,7 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
       body.deliveryDate = new Date(body.deliveryDate).toISOString();
     }
 
-    if (body.items !== undefined) {
-      body.items = normalizeItems(body.items);
-    }
+    const items = body.items !== undefined ? normalizeItems(body.items) : null;
 
     if (body.amount !== undefined && body.amount !== '') {
       body.amount = Number(body.amount);
@@ -239,23 +308,29 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
       body.invoiceImage = null;
     }
 
+    delete body.items;
     delete body.invoiceBase64;
     delete body.invoiceContentType;
     delete body.invoiceFilename;
 
     const updated = await updateRow('deliveries', req.params.id, body);
+    if (items) {
+      await syncDeliveryItems(req.params.id, items);
+    }
+
     const affectedItems = [
-      ...(existingDelivery.items || []).map((item) => typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName),
-      ...((updated?.items || []).map((item) => typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName)),
+      ...((existingDelivery.items || []).map((item) => readItemId(item))),
+      ...((items || []).map((item) => item.inventoryId)),
     ];
 
     await recalculateInventoryStocks(affectedItems);
 
+    const populated = await populateDelivery(updated);
     await createLog('EDIT_DELIVERY', req.user.id, req.user.username, `Edited delivery: ${req.params.id}`);
     if (global.io) {
-      global.io.emit('delivery:updated', updated);
+      global.io.emit('delivery:updated', populated);
     }
-    res.json(updated);
+    res.json(populated);
   } catch (err) {
     console.error('Update delivery error:', err);
     res.status(400).json({ error: 'Failed to update delivery' });
@@ -264,13 +339,14 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
 
 router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
   try {
-    const delivery = await fetchById('deliveries', req.params.id);
+    const delivery = await populateDelivery(await fetchById('deliveries', req.params.id));
     if (!delivery) {
       return res.status(404).json({ error: 'Delivery not found' });
     }
 
-    const affectedItems = (delivery.items || []).map((item) => typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName);
+    const affectedItems = (delivery.items || []).map((item) => readItemId(item));
 
+    await syncDeliveryItems(req.params.id, []);
     await deleteRow('deliveries', req.params.id);
     await recalculateInventoryStocks(affectedItems);
 
