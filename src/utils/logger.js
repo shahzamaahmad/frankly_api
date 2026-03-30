@@ -1,8 +1,18 @@
-const Log = require('../models/log');
+const { insertRow } = require('../lib/db');
 
 async function createLog(action, userId, username, details = '') {
   try {
-    await Log.create({ action, userId, username, details });
+    await insertRow(
+      'logs',
+      {
+        action,
+        userId,
+        username,
+        details,
+        timestamp: new Date().toISOString(),
+      },
+      { timestamps: false }
+    );
   } catch (err) {
     console.error('Failed to create log:', err);
   }

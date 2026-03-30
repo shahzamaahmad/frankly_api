@@ -13,10 +13,10 @@ const loadRoute = (path) => {
 };
 
 const express = loadRoute('express');
-const mongoose = loadRoute('mongoose');
 const cors = loadRoute('cors');
 const swaggerUi = loadRoute('swagger-ui-express');
 const swaggerSpec = loadRoute('./swagger');
+const { getSupabaseAdmin } = loadRoute('./lib/supabase');
 
 
 
@@ -111,57 +111,46 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 4000;
+getSupabaseAdmin();
 
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  maxPoolSize: 10,
-  minPoolSize: 2,
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-}).then(() => {
-  const http = require('http');
-  const socketIo = require('socket.io');
-  const server = http.createServer(app);
-  const io = socketIo(server, {
-    cors: { origin: '*', methods: ['GET', 'POST'] }
+const http = require('http');
+const socketIo = require('socket.io');
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] }
+});
+
+const jwt = require('jsonwebtoken');
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    return next(new Error('Authentication error'));
+  }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.id;
+    next();
+  } catch (err) {
+    next(new Error('Authentication error'));
+  }
+});
+
+io.on('connection', (socket) => {
+  socket.join(`user:${socket.userId}`);
+
+  socket.on('disconnect', () => {
   });
+});
 
-  const jwt = require('jsonwebtoken');
+global.io = io;
 
-  io.use((socket, next) => {
-    const token = socket.handshake.auth.token;
-    if (!token) {
-      return next(new Error('Authentication error'));
-    }
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.userId = decoded.id;
-      next();
-    } catch (err) {
-      next(new Error('Authentication error'));
-    }
-  });
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
-  io.on('connection', (socket) => {
-    socket.join(`user:${socket.userId}`);
-
-    socket.on('disconnect', () => {
-    });
-  });
-
-  global.io = io;
-
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-
-  server.on('error', (err) => {
-    console.error('Server error:', err);
-    process.exit(1);
-  });
-}).catch(err => {
-  console.error('MongoDB connection error:', err.message);
+server.on('error', (err) => {
+  console.error('Server error:', err);
   process.exit(1);
 });
 
@@ -177,7 +166,5 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('SIGTERM', () => {
-  mongoose.connection.close(false, () => {
-    process.exit(0);
-  });
+  process.exit(0);
 });

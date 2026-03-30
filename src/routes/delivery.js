@@ -1,11 +1,14 @@
-
 const express = require('express');
-const router = express.Router();
-const Delivery = require('../models/delivery');
-const Inventory = require('../models/inventory');
 const multer = require('multer');
+const { ID_COLUMN, fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
+const { uploadBufferToCloudinary } = require('../utils/cloudinary');
+const checkPermission = require('../middlewares/checkPermission');
+const { createLog } = require('../utils/logger');
+
+const router = express.Router();
 
 const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
+
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
@@ -17,9 +20,137 @@ const upload = multer({
     }
   }
 });
-const { uploadBufferToCloudinary } = require('../utils/cloudinary');
-const checkPermission = require('../middlewares/checkPermission');
-const { createLog } = require('../utils/logger');
+
+function normalizeItems(items) {
+  const source = typeof items === 'string' ? JSON.parse(items) : items;
+  if (!Array.isArray(source)) {
+    return [];
+  }
+
+  return source
+    .filter((item) => item && item.itemName)
+    .map((item) => ({
+      itemName: typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName,
+      quantity: Number(item.quantity || 0),
+    }))
+    .filter((item) => item.quantity > 0);
+}
+
+async function uploadInvoice(req, body) {
+  try {
+    if (req.file) {
+      body.invoiceImage = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
+    } else if (body.invoiceBase64) {
+      const buffer = Buffer.from(body.invoiceBase64, 'base64');
+      body.invoiceImage = await uploadBufferToCloudinary(buffer, 'invoice');
+    }
+  } catch (error) {
+    console.error('CDN upload failed:', error.message);
+    if (req.file) body.invoiceImage = req.file.buffer.toString('base64');
+    else if (body.invoiceBase64) body.invoiceImage = body.invoiceBase64;
+  }
+}
+
+async function generateDeliveryId() {
+  const now = getDubaiTime();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  const prefix = `DEL-${dd}${mm}${yyyy}-`;
+
+  const latest = await fetchMany('deliveries', {
+    filters: [{ column: 'deliveryId', operator: 'like', value: `${prefix}%` }],
+    orderBy: 'deliveryId',
+    ascending: false,
+    limit: 1,
+  });
+
+  let nextNum = 1;
+  if (latest[0]?.deliveryId) {
+    const match = latest[0].deliveryId.match(/-(\d+)$/);
+    if (match) {
+      nextNum = Number.parseInt(match[1], 10) + 1;
+    }
+  }
+
+  return `${prefix}${String(nextNum).padStart(4, '0')}`;
+}
+
+async function recalculateInventoryStock(itemId) {
+  const inventory = await fetchById('inventory', itemId);
+  if (!inventory) {
+    return;
+  }
+
+  const [transactions, deliveries] = await Promise.all([
+    fetchMany('transactions', { filters: [{ column: 'item', operator: 'eq', value: itemId }] }),
+    fetchMany('deliveries'),
+  ]);
+
+  let totalDelivered = 0;
+  let totalIssued = 0;
+  let totalReturned = 0;
+
+  for (const delivery of deliveries) {
+    for (const item of delivery.items || []) {
+      const deliveryItemId = typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName;
+      if (String(deliveryItemId) === String(itemId)) {
+        totalDelivered += Number(item.quantity || 0);
+      }
+    }
+  }
+
+  for (const transaction of transactions) {
+    if (transaction.type === 'ISSUE') totalIssued += Number(transaction.quantity || 0);
+    if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
+  }
+
+  const currentStock = Number(inventory.initialStock || 0) + totalDelivered - totalIssued + totalReturned;
+  await updateRow('inventory', itemId, { currentStock });
+}
+
+async function recalculateInventoryStocks(itemIds) {
+  for (const itemId of uniqueIds(itemIds)) {
+    await recalculateInventoryStock(itemId);
+  }
+}
+
+async function populateDeliveries(deliveries) {
+  if (!deliveries.length) {
+    return [];
+  }
+
+  const inventoryIds = uniqueIds(
+    deliveries.flatMap((delivery) => (delivery.items || []).map((item) => (
+      typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName
+    )))
+  );
+
+  const inventory = inventoryIds.length
+    ? await fetchMany('inventory', { filters: [{ column: ID_COLUMN, operator: 'in', value: inventoryIds }] })
+    : [];
+  const inventoryMap = indexById(inventory.map((item) => ({
+    _id: item._id,
+    name: item.name,
+    sku: item.sku,
+  })));
+
+  return deliveries.map((delivery) => ({
+    ...delivery,
+    items: (delivery.items || []).map((item) => {
+      const itemId = typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName;
+      return {
+        ...item,
+        itemName: itemId ? (inventoryMap.get(String(itemId)) || item.itemName) : item.itemName,
+      };
+    }),
+  }));
+}
+
+async function populateDelivery(delivery) {
+  const populated = await populateDeliveries(delivery ? [delivery] : []);
+  return populated[0] || null;
+}
 
 router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
   upload.single('invoice')(req, res, (err) => {
@@ -28,75 +159,30 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
   });
 }, async (req, res) => {
   try {
-    const body = req.body;
-    
+    const body = { ...req.body };
+
     if (body.deliveryDate && typeof body.deliveryDate === 'string') {
-      body.deliveryDate = new Date(body.deliveryDate);
+      body.deliveryDate = new Date(body.deliveryDate).toISOString();
     }
-    
-    try {
-      if (req.file) {
-        body.invoiceImage = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
-      } else if (body.invoiceBase64) {
-        const b = Buffer.from(body.invoiceBase64, 'base64');
-        body.invoiceImage = await uploadBufferToCloudinary(b, 'invoice');
-      }
-    } catch (e) {
-      console.error('CDN upload failed:', e.message);
-      if (req.file) body.invoiceImage = req.file.buffer.toString('base64');
-      else if (body.invoiceBase64) body.invoiceImage = body.invoiceBase64;
-    }
-    
-    if (typeof body.items === 'string') {
-      body.items = JSON.parse(body.items);
-    }
-    
-    const Transaction = require('../models/transaction');
-    const DeliveryModel = require('../models/delivery');
-    
-    const now = getDubaiTime();
-    const dd = String(now.getDate()).padStart(2, '0');
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const yyyy = now.getFullYear();
-    const dateStr = `${dd}${mm}${yyyy}`;
-    const todayPrefix = `DEL-${dateStr}-`;
-    const lastDelivery = await Delivery.findOne({ deliveryId: { $regex: `^${todayPrefix}` } }).sort({ deliveryId: -1 });
-    let nextNum = 1;
-    if (lastDelivery) {
-      const match = lastDelivery.deliveryId.match(/-(\d+)$/);
-      if (match) nextNum = parseInt(match[1]) + 1;
-    }
-    body.deliveryId = `${todayPrefix}${String(nextNum).padStart(4, '0')}`;
-    
-    if (body.items && Array.isArray(body.items)) {
-      for (const item of body.items) {
-        if (item.itemName && item.quantity > 0) {
-          const inv = await Inventory.findById(item.itemName);
-          if (inv) {
-            const deliveries = await DeliveryModel.find({ 'items.itemName': item.itemName });
-            const totalDelivered = deliveries.reduce((sum, d) => {
-              return sum + d.items.filter(i => i.itemName.toString() === item.itemName).reduce((s, i) => s + i.quantity, 0);
-            }, 0) + item.quantity;
-            
-            const transactions = await Transaction.find({ item: item.itemName });
-            const totalIssued = transactions.filter(t => t.type === 'ISSUE').reduce((sum, t) => sum + t.quantity, 0);
-            const totalReturned = transactions.filter(t => t.type === 'RETURN').reduce((sum, t) => sum + t.quantity, 0);
-            
-            const newStock = inv.initialStock + totalDelivered - totalIssued + totalReturned;
-            await Inventory.findByIdAndUpdate(item.itemName, { currentStock: newStock });
-          }
-        }
-      }
-    }
-    
-    const d = new Delivery(body);
-    await d.save();
-    
-    await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${body.deliveryNumber || d._id}`);
+
+    await uploadInvoice(req, body);
+
+    body.items = normalizeItems(body.items);
+    body.amount = body.amount !== undefined && body.amount !== '' ? Number(body.amount) : body.amount;
+    body.deliveryId = await generateDeliveryId();
+
+    delete body.invoiceBase64;
+    delete body.invoiceContentType;
+    delete body.invoiceFilename;
+
+    const delivery = await insertRow('deliveries', body);
+    await recalculateInventoryStocks(body.items.map((item) => item.itemName));
+
+    await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${delivery.deliveryId || delivery._id}`);
     if (global.io) {
-      global.io.emit('delivery:created', d);
+      global.io.emit('delivery:created', delivery);
     }
-    res.status(201).json(d);
+    res.status(201).json(delivery);
   } catch (err) {
     console.error('Create delivery error:', err);
     res.status(400).json({ error: 'Failed to create delivery' });
@@ -105,8 +191,8 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
 
 router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
   try {
-    const list = await Delivery.find().populate('items.itemName', 'name sku');
-    res.json(list);
+    const deliveries = await fetchMany('deliveries', { orderBy: 'createdAt', ascending: false });
+    res.json(await populateDeliveries(deliveries));
   } catch (err) {
     console.error('Get deliveries error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -115,9 +201,9 @@ router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
 
 router.get('/:id', checkPermission('viewDeliveries'), async (req, res) => {
   try {
-    const item = await Delivery.findById(req.params.id).populate('items.itemName', 'name sku');
-    if (!item) return res.status(404).json({ error: 'Delivery not found' });
-    res.json(item);
+    const delivery = await fetchById('deliveries', req.params.id);
+    if (!delivery) return res.status(404).json({ error: 'Delivery not found' });
+    res.json(await populateDelivery(delivery));
   } catch (err) {
     console.error('Get delivery error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -131,51 +217,40 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
   });
 }, async (req, res) => {
   try {
-    const body = req.body;
-    
-    const oldDelivery = await Delivery.findById(req.params.id);
-    if (!oldDelivery) return res.status(404).json({ error: 'Delivery not found' });
-    
-    if (oldDelivery.items && Array.isArray(oldDelivery.items)) {
-      for (const item of oldDelivery.items) {
-        await Inventory.findByIdAndUpdate(
-          item.itemName,
-          { $inc: { currentStock: -item.quantity } }
-        );
-      }
+    const body = { ...req.body };
+    const existingDelivery = await fetchById('deliveries', req.params.id);
+    if (!existingDelivery) return res.status(404).json({ error: 'Delivery not found' });
+
+    await uploadInvoice(req, body);
+
+    if (body.deliveryDate && typeof body.deliveryDate === 'string') {
+      body.deliveryDate = new Date(body.deliveryDate).toISOString();
     }
-    
-    try {
-      if (req.file) {
-        body.invoiceImage = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
-      }
-    } catch (e) {
-      console.error('CDN upload failed:', e.message);
-      if (req.file) body.invoiceImage = req.file.buffer.toString('base64');
+
+    if (body.items !== undefined) {
+      body.items = normalizeItems(body.items);
     }
-    
-    if (typeof body.items === 'string') {
-      body.items = JSON.parse(body.items);
+
+    if (body.amount !== undefined && body.amount !== '') {
+      body.amount = Number(body.amount);
     }
-    
-    if (body.items && Array.isArray(body.items)) {
-      for (const item of body.items) {
-        if (item.itemName && item.quantity > 0) {
-          await Inventory.findByIdAndUpdate(
-            item.itemName,
-            { $inc: { currentStock: item.quantity } }
-          );
-        }
-      }
+
+    if (typeof body.invoiceImage === 'string' && body.invoiceImage === '') {
+      body.invoiceImage = null;
     }
-    
-    const shouldClearInvoice = typeof body.invoiceImage === 'string' && body.invoiceImage === '';
-    if (shouldClearInvoice) delete body.invoiceImage;
-    const updateOps = {};
-    if (Object.keys(body).length) updateOps['$set'] = body;
-    if (shouldClearInvoice) updateOps['$unset'] = { invoiceImage: '' };
-    const updated = await Delivery.findByIdAndUpdate(req.params.id, updateOps, { new: true });
-    
+
+    delete body.invoiceBase64;
+    delete body.invoiceContentType;
+    delete body.invoiceFilename;
+
+    const updated = await updateRow('deliveries', req.params.id, body);
+    const affectedItems = [
+      ...(existingDelivery.items || []).map((item) => typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName),
+      ...((updated?.items || []).map((item) => typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName)),
+    ];
+
+    await recalculateInventoryStocks(affectedItems);
+
     await createLog('EDIT_DELIVERY', req.user.id, req.user.username, `Edited delivery: ${req.params.id}`);
     if (global.io) {
       global.io.emit('delivery:updated', updated);
@@ -189,22 +264,16 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
 
 router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
   try {
-    const delivery = await Delivery.findById(req.params.id);
+    const delivery = await fetchById('deliveries', req.params.id);
     if (!delivery) {
       return res.status(404).json({ error: 'Delivery not found' });
     }
-    
-    if (delivery.items && Array.isArray(delivery.items)) {
-      for (const item of delivery.items) {
-        await Inventory.findByIdAndUpdate(
-          item.itemName,
-          { $inc: { currentStock: -item.quantity } }
-        );
-      }
-    }
 
-    await Delivery.findByIdAndDelete(req.params.id);
-    
+    const affectedItems = (delivery.items || []).map((item) => typeof item.itemName === 'object' ? (item.itemName._id || item.itemName.id) : item.itemName);
+
+    await deleteRow('deliveries', req.params.id);
+    await recalculateInventoryStocks(affectedItems);
+
     await createLog('DELETE_DELIVERY', req.user.id, req.user.username, `Deleted delivery: ${req.params.id}`);
     if (global.io) {
       global.io.emit('delivery:deleted', { id: req.params.id });

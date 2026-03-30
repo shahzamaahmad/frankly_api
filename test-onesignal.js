@@ -4,7 +4,7 @@ const axios = require('axios');
 const testUserId = process.argv[2];
 
 if (!testUserId) {
-  console.log('Usage: node test-onesignal.js <user_mongodb_id>');
+  console.log('Usage: node test-onesignal.js <user_id>');
   process.exit(1);
 }
 

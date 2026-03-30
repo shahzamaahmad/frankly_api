@@ -2,7 +2,15 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const User = require('../models/user');
+const { fetchById, fetchOne, insertRow, updateRow } = require('../lib/db');
+const {
+  buildFullName,
+  comparePassword,
+  generateUsername,
+  hashPassword,
+  mergePermissions,
+  sanitizeUser,
+} = require('../lib/users');
 const { createLog } = require('../utils/logger');
 
 /**
@@ -73,8 +81,10 @@ const { createLog } = require('../utils/logger');
 router.post('/generate-username', async (req, res) => {
   try {
     const { firstName, lastName } = req.body;
-    const username = User.generateUsername(firstName, lastName);
-    const exists = await User.checkUsernameExists(username);
+    const username = generateUsername(firstName, lastName);
+    const exists = !!(await fetchOne('users', {
+      filters: [{ column: 'username', operator: 'eq', value: username }],
+    }));
     res.json({ username, exists });
   } catch (err) {
     console.error('Generate username error:', err);
@@ -91,15 +101,32 @@ router.post('/signup', async (req, res) => {
     if (userData.password.length < 6) {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
-    const exists = await User.checkUsernameExists(userData.username);
+    const exists = !!(await fetchOne('users', {
+      filters: [{ column: 'username', operator: 'eq', value: userData.username }],
+    }));
     if (exists) {
       return res.status(400).json({ message: 'Username already exists' });
     }
-    const user = new User(userData);
-    if (req.body.firstName && req.body.lastName && !req.body.fullName) {
-      user.fullName = `${req.body.firstName} ${req.body.lastName}`;
-    }
-    await user.save();
+
+    const fullName = userData.fullName || userData.name || buildFullName(userData);
+    const password = await hashPassword(userData.password);
+    const payload = {
+      ...userData,
+      phone: userData.phone || userData.mobile,
+      fullName,
+      password,
+      role: userData.role || 'emp',
+      isActive: userData.isActive !== false,
+      permissions: mergePermissions(userData.permissions),
+      assets: Array.isArray(userData.assets) ? userData.assets : [],
+      salaryCurrency: userData.salaryCurrency || 'AED',
+    };
+
+    delete payload.name;
+    delete payload.mobile;
+
+    const user = await insertRow('users', payload);
+
     res.status(201).json({ message: 'User created', username: user.username });
   } catch (err) {
     console.error('Signup error:', err);
@@ -115,21 +142,27 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Username and password are required' });
     }
     
-    const user = await User.findOne({ username });
+    const user = await fetchOne('users', {
+      filters: [{ column: 'username', operator: 'eq', value: username }],
+    });
     if (!user) return res.status(401).json({ message: 'Invalid credentials' });
     if (!user.isActive) return res.status(403).json({ message: 'Account is deactivated' });
-    const match = await user.comparePassword(password);
+    const match = await comparePassword(password, user.password);
     if (!match) return res.status(401).json({ message: 'Invalid credentials' });
     
-    user.lastLoginAt = new Date();
-    await user.save();
+    const updatedUser = await updateRow('users', user._id || user.id, {
+      lastLoginAt: new Date().toISOString(),
+    });
     
-    await createLog('LOGIN', user._id, user.username, `User logged in`);
+    await createLog('LOGIN', updatedUser._id, updatedUser.username, 'User logged in');
     
-    const token = jwt.sign({ id: user._id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
-    const userObj = user.toObject();
-    delete userObj.password;
-    res.json({ token, user: { ...userObj, id: user._id } });
+    const sessionUser = sanitizeUser(updatedUser);
+    const token = jwt.sign(
+      { id: sessionUser.id, username: sessionUser.username, role: sessionUser.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+    res.json({ token, user: sessionUser });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ message: 'Internal server error' });
@@ -142,7 +175,7 @@ router.get('/profile', async (req, res) => {
     if (!token) return res.status(401).json({ message: 'No token provided' });
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    const user = sanitizeUser(await fetchById('users', decoded.id));
     if (!user) return res.status(404).json({ message: 'User not found' });
     
     res.json(user);
@@ -158,13 +191,16 @@ router.post('/refresh-token', async (req, res) => {
     if (!token) return res.status(401).json({ message: 'No token provided' });
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    const user = sanitizeUser(await fetchById('users', decoded.id));
     if (!user) return res.status(404).json({ message: 'User not found' });
     if (!user.isActive) return res.status(403).json({ message: 'Account is deactivated' });
     
-    const newToken = jwt.sign({ id: user._id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
-    const userObj = user.toObject();
-    res.json({ token: newToken, user: { ...userObj, id: user._id } });
+    const newToken = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+    res.json({ token: newToken, user });
   } catch (err) {
     console.error('Refresh token error:', err);
     res.status(401).json({ message: 'Unauthorized' });
@@ -187,16 +223,16 @@ router.put('/change-password', async (req, res) => {
       return res.status(400).json({ message: 'New password must be at least 6 characters' });
     }
     
-    const user = await User.findById(decoded.id);
+    const user = await fetchById('users', decoded.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
-    const match = await user.comparePassword(currentPassword);
+    const match = await comparePassword(currentPassword, user.password);
     if (!match) return res.status(401).json({ message: 'Current password is incorrect' });
     
-    user.password = newPassword;
-    await user.save();
+    const password = await hashPassword(newPassword);
+    await updateRow('users', user._id || user.id, { password });
     
-    await createLog('CHANGE_PASSWORD', user._id, user.username, `Password changed`);
+    await createLog('CHANGE_PASSWORD', user._id || user.id, user.username, 'Password changed');
     
     res.json({ message: 'Password changed successfully' });
   } catch (err) {

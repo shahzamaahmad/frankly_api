@@ -1,14 +1,14 @@
 const express = require('express');
-const router = express.Router();
-const User = require('../models/user');
+const { fetchById, fetchMany, deleteRow, updateRow } = require('../lib/db');
+const { buildFullName, hashPassword, sanitizeUser } = require('../lib/users');
 const checkPermission = require('../middlewares/checkPermission');
+
+const router = express.Router();
 
 router.get('/', checkPermission('viewEmployees'), async (req, res) => {
   try {
-    const users = await User.find()
-      .select('-password')
-      .lean();
-    res.json(users);
+    const users = await fetchMany('users', { orderBy: 'createdAt', ascending: false });
+    res.json(users.map((user) => sanitizeUser(user)));
   } catch (err) {
     console.error('Get users error:', err);
     res.status(500).json({ message: 'Internal server error' });
@@ -17,7 +17,7 @@ router.get('/', checkPermission('viewEmployees'), async (req, res) => {
 
 router.get('/:id', checkPermission('viewEmployees'), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const user = sanitizeUser(await fetchById('users', req.params.id));
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
@@ -34,32 +34,39 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
       return res.status(400).json({ message: 'Username must be at least 3 characters' });
     }
 
-    if (updates.firstName && updates.lastName && !updates.fullName) {
-      updates.fullName = `${updates.firstName} ${updates.lastName}`;
-    }
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const currentUser = await fetchById('users', req.params.id);
+    if (!currentUser) return res.status(404).json({ message: 'User not found' });
 
-    const permissionsChanged = updates.permissions && JSON.stringify(user.permissions) !== JSON.stringify(updates.permissions);
+    const nextFullName = updates.fullName || buildFullName({
+      ...currentUser,
+      ...updates,
+    });
+    if (nextFullName) {
+      updates.fullName = nextFullName;
+    }
+
+    const permissionsChanged = updates.permissions &&
+      JSON.stringify(currentUser.permissions || {}) !== JSON.stringify(updates.permissions);
 
     if (updates.password) {
-      user.password = updates.password;
-      delete updates.password;
+      updates.password = await hashPassword(updates.password);
     }
-    Object.assign(user, updates);
-    await user.save();
+
+    delete updates._id;
+    delete updates.id;
+    delete updates.createdAt;
+
+    const updatedUser = sanitizeUser(await updateRow('users', req.params.id, updates));
 
     if (permissionsChanged && global.io) {
-      global.io.to(`user:${req.params.id}`).emit('permissionsUpdated', { permissions: user.permissions });
+      global.io.to(`user:${req.params.id}`).emit('permissionsUpdated', { permissions: updatedUser.permissions });
     }
 
     if (global.io) {
       global.io.emit('user:updated', { id: req.params.id });
     }
 
-    const userObj = user.toObject();
-    delete userObj.password;
-    res.json(userObj);
+    res.json(updatedUser);
   } catch (err) {
     console.error('Update user error:', err);
     res.status(500).json({ message: 'Internal server error' });
@@ -72,7 +79,7 @@ router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
       return res.status(400).json({ message: 'Cannot delete your own account' });
     }
 
-    const user = await User.findByIdAndDelete(req.params.id);
+    const user = await deleteRow('users', req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json({ message: 'User deleted successfully' });
   } catch (err) {
@@ -134,44 +141,47 @@ router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
 router.post('/:id/assign-asset', checkPermission('editEmployees'), async (req, res) => {
   try {
     const { item, quantity, condition, remarks } = req.body;
-    const Inventory = require('../models/inventory');
-    const Transaction = require('../models/transaction');
 
-    const user = await User.findById(req.params.id);
+    const [user, inventoryItem, transactions, users] = await Promise.all([
+      fetchById('users', req.params.id),
+      fetchById('inventory', item),
+      fetchMany('transactions', { filters: [{ column: 'item', operator: 'eq', value: item }] }),
+      fetchMany('users'),
+    ]);
+
     if (!user) return res.status(404).json({ message: 'User not found' });
-
-    const inventoryItem = await Inventory.findById(item).lean();
     if (!inventoryItem) return res.status(404).json({ message: 'Item not found' });
-
-    const transactions = await Transaction.find({ item }).lean();
-    const users = await User.find({ 'assets.item': item }).lean();
 
     let issued = 0;
     let returned = 0;
-    for (const txn of transactions) {
-      if (txn.type === 'ISSUE') issued += txn.quantity || 0;
-      if (txn.type === 'RETURN') returned += txn.quantity || 0;
+    for (const transaction of transactions) {
+      if (transaction.type === 'ISSUE') issued += Number(transaction.quantity || 0);
+      if (transaction.type === 'RETURN') returned += Number(transaction.quantity || 0);
     }
 
     let assignedToEmployees = 0;
-    for (const u of users) {
-      for (const asset of u.assets || []) {
-        if (asset.item && asset.item.toString() === item) {
-          assignedToEmployees += asset.quantity || 0;
+    for (const candidate of users) {
+      for (const asset of candidate.assets || []) {
+        if (String(asset.item) === String(item)) {
+          assignedToEmployees += Number(asset.quantity || 0);
         }
       }
     }
 
-    const currentStock = (inventoryItem.initialStock || 0) - issued + returned - assignedToEmployees;
-
-    if (currentStock < quantity) {
+    const currentStock = Number(inventoryItem.initialStock || 0) - issued + returned - assignedToEmployees;
+    if (currentStock < Number(quantity)) {
       return res.status(400).json({ message: 'Insufficient stock' });
     }
 
-    const asset = { item, quantity, condition, remarks };
-    if (!user.assets) user.assets = [];
-    user.assets.push(asset);
-    await user.save();
+    const nextAssets = Array.isArray(user.assets) ? [...user.assets] : [];
+    nextAssets.push({
+      item,
+      quantity: Number(quantity),
+      condition,
+      remarks,
+    });
+
+    await updateRow('users', req.params.id, { assets: nextAssets });
 
     res.json({ message: 'Asset assigned successfully' });
   } catch (err) {

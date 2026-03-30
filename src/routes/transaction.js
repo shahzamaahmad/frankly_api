@@ -1,96 +1,161 @@
 const express = require('express');
-const router = express.Router();
-const Transaction = require('../models/transaction');
-const Inventory = require('../models/inventory');
-const { authMiddleware } = require('../middlewares/auth');
+const { ID_COLUMN, fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
 const checkPermission = require('../middlewares/checkPermission');
 const { createLog } = require('../utils/logger');
 
+const router = express.Router();
+
 const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
 
-router.get('/', authMiddleware, checkPermission('viewTransactions'), async (req, res) => {
+async function populateTransactions(transactions) {
+  if (!transactions.length) {
+    return [];
+  }
+
+  const employeeIds = uniqueIds(transactions.map((transaction) => transaction.employee));
+  const siteIds = uniqueIds(transactions.map((transaction) => transaction.site));
+  const itemIds = uniqueIds(transactions.map((transaction) => transaction.item));
+
+  const [employees, sites, items] = await Promise.all([
+    employeeIds.length ? fetchMany('users', { filters: [{ column: ID_COLUMN, operator: 'in', value: employeeIds }] }) : [],
+    siteIds.length ? fetchMany('sites', { filters: [{ column: ID_COLUMN, operator: 'in', value: siteIds }] }) : [],
+    itemIds.length ? fetchMany('inventory', { filters: [{ column: ID_COLUMN, operator: 'in', value: itemIds }] }) : [],
+  ]);
+
+  const employeeMap = indexById(employees.map((employee) => ({
+    _id: employee._id,
+    fullName: employee.fullName,
+    username: employee.username,
+    email: employee.email,
+  })));
+  const siteMap = indexById(sites.map((site) => ({
+    _id: site._id,
+    siteName: site.siteName,
+    siteCode: site.siteCode,
+  })));
+  const itemMap = indexById(items.map((item) => ({
+    _id: item._id,
+    name: item.name,
+    sku: item.sku,
+  })));
+
+  return transactions.map((transaction) => ({
+    ...transaction,
+    employee: transaction.employee ? (employeeMap.get(String(transaction.employee)) || transaction.employee) : transaction.employee,
+    site: transaction.site ? (siteMap.get(String(transaction.site)) || transaction.site) : transaction.site,
+    item: transaction.item ? (itemMap.get(String(transaction.item)) || transaction.item) : transaction.item,
+  }));
+}
+
+async function populateTransaction(transaction) {
+  const populated = await populateTransactions(transaction ? [transaction] : []);
+  return populated[0] || null;
+}
+
+async function generateTransactionId(timestamp) {
+  const now = timestamp ? new Date(timestamp) : getDubaiTime();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  const prefix = `TXN-${dd}${mm}${yyyy}-`;
+
+  const latest = await fetchMany('transactions', {
+    filters: [{ column: 'transactionId', operator: 'like', value: `${prefix}%` }],
+    orderBy: 'transactionId',
+    ascending: false,
+    limit: 1,
+  });
+
+  let nextNum = 1;
+  if (latest[0]?.transactionId) {
+    const match = latest[0].transactionId.match(/-(\d+)$/);
+    if (match) {
+      nextNum = Number.parseInt(match[1], 10) + 1;
+    }
+  }
+
+  return {
+    transactionId: `${prefix}${String(nextNum).padStart(4, '0')}`,
+    timestamp: now.toISOString(),
+  };
+}
+
+async function applyTransactionStock(itemId, quantity, type, reverse = false) {
+  const inventory = await fetchById('inventory', itemId);
+  if (!inventory) {
+    throw new Error('Item not found');
+  }
+
+  const signedQuantity = Number(quantity || 0) * (reverse ? -1 : 1);
+  let delta = 0;
+
+  if (type === 'ISSUE') {
+    delta = -signedQuantity;
+  } else if (type === 'RETURN') {
+    delta = signedQuantity;
+  }
+
+  return updateRow('inventory', itemId, {
+    currentStock: Number(inventory.currentStock || 0) + delta,
+  });
+}
+
+router.get('/', checkPermission('viewTransactions'), async (req, res) => {
   try {
-    const { site, item } = req.query;
-    const filter = {};
-    if (site && typeof site === 'string') filter.site = site;
-    if (item && typeof item === 'string') filter.item = item;
-    
-    const transactions = await Transaction.find(filter)
-      .populate('employee', 'fullName username email')
-      .populate('site', 'siteName siteCode')
-      .populate('item', 'name sku')
-      .sort({ timestamp: -1 });
-    res.json(transactions);
+    const filters = [];
+    if (req.query.site && typeof req.query.site === 'string') filters.push({ column: 'site', operator: 'eq', value: req.query.site });
+    if (req.query.item && typeof req.query.item === 'string') filters.push({ column: 'item', operator: 'eq', value: req.query.item });
+
+    const transactions = await fetchMany('transactions', {
+      filters,
+      orderBy: 'timestamp',
+      ascending: false,
+    });
+
+    res.json(await populateTransactions(transactions));
   } catch (err) {
     console.error('Get transactions error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get('/:id', authMiddleware, checkPermission('viewTransactions'), async (req, res) => {
+router.get('/:id', checkPermission('viewTransactions'), async (req, res) => {
   try {
-    const transaction = await Transaction.findById(req.params.id)
-      .populate('employee', 'fullName username email')
-      .populate('site', 'siteName siteCode')
-      .populate('item');
+    const transaction = await fetchById('transactions', req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
-    res.json(transaction);
+    res.json(await populateTransaction(transaction));
   } catch (err) {
     console.error('Get transaction error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.post('/', authMiddleware, checkPermission('addTransactions'), async (req, res) => {
+router.post('/', checkPermission('addTransactions'), async (req, res) => {
   try {
     const { type, employee, site, item, quantity, returnDetails, relatedTo, timestamp } = req.body;
-    
-    if (!type || !site || !item || !quantity || quantity <= 0) {
+
+    if (!type || !site || !item || !quantity || Number(quantity) <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
     }
-    
-    const inventory = await Inventory.findById(item);
-    if (!inventory) return res.status(404).json({ error: 'Item not found' });
 
-    const now = timestamp ? new Date(timestamp) : getDubaiTime();
-    const dd = String(now.getDate()).padStart(2, '0');
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const yyyy = now.getFullYear();
-    const dateStr = `${dd}${mm}${yyyy}`;
-    const todayPrefix = `TXN-${dateStr}-`;
-    const lastTransaction = await Transaction.findOne({ transactionId: { $regex: `^${todayPrefix}` } }).sort({ transactionId: -1 });
-    let nextNum = 1;
-    if (lastTransaction) {
-      const match = lastTransaction.transactionId.match(/-(\d+)$/);
-      if (match) nextNum = parseInt(match[1]) + 1;
-    }
-    const transactionId = `${todayPrefix}${String(nextNum).padStart(4, '0')}`;
+    const { transactionId, timestamp: createdTimestamp } = await generateTransactionId(timestamp);
+    await applyTransactionStock(item, quantity, type);
 
-    if (type === 'ISSUE') {
-      inventory.currentStock -= quantity;
-    } else if (type === 'RETURN') {
-      inventory.currentStock += quantity;
-    }
-    await inventory.save();
-
-    const transaction = new Transaction({
+    const transaction = await insertRow('transactions', {
       transactionId,
       type,
-      employee,
+      employee: employee || null,
       site,
       item,
-      quantity,
+      quantity: Number(quantity),
       returnDetails,
       relatedTo,
-      timestamp: now
-    });
+      timestamp: createdTimestamp,
+      createdAt: createdTimestamp,
+    }, { timestamps: false });
 
-    await transaction.save();
-    const populated = await Transaction.findById(transaction._id)
-      .populate('employee', 'fullName username email')
-      .populate('site', 'siteName siteCode')
-      .populate('item', 'name sku');
-    
+    const populated = await populateTransaction(transaction);
+
     await createLog('ADD_TRANSACTION', req.user.id, req.user.username, `Added ${type} transaction: ${transactionId}`);
     if (global.io) {
       global.io.emit('transaction:created', populated);
@@ -98,55 +163,37 @@ router.post('/', authMiddleware, checkPermission('addTransactions'), async (req,
     res.status(201).json(populated);
   } catch (err) {
     console.error('Create transaction error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    const status = err.message === 'Item not found' ? 404 : 500;
+    res.status(status).json({ error: status === 404 ? 'Item not found' : 'Internal server error' });
   }
 });
 
-router.put('/:id', authMiddleware, checkPermission('editTransactions'), async (req, res) => {
+router.put('/:id', checkPermission('editTransactions'), async (req, res) => {
   try {
-    const transaction = await Transaction.findById(req.params.id);
+    const transaction = await fetchById('transactions', req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
     const { type, employee, site, item, quantity, returnDetails, relatedTo } = req.body;
-    
-    if (!type || !site || !item || !quantity || quantity <= 0) {
+
+    if (!type || !site || !item || !quantity || Number(quantity) <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
     }
 
-    const oldInventory = await Inventory.findById(transaction.item);
-    if (oldInventory) {
-      if (transaction.type === 'ISSUE') {
-        oldInventory.currentStock += transaction.quantity;
-      } else if (transaction.type === 'RETURN') {
-        oldInventory.currentStock -= transaction.quantity;
-      }
-      await oldInventory.save();
-    }
+    await applyTransactionStock(transaction.item, transaction.quantity, transaction.type, true);
+    await applyTransactionStock(item, quantity, type);
 
-    const newInventory = await Inventory.findById(item);
-    if (!newInventory) return res.status(404).json({ error: 'Item not found' });
+    const updated = await updateRow('transactions', req.params.id, {
+      type,
+      employee: employee || null,
+      site,
+      item,
+      quantity: Number(quantity),
+      returnDetails,
+      relatedTo,
+    }, { timestamps: false });
 
-    if (type === 'ISSUE') {
-      newInventory.currentStock -= quantity;
-    } else if (type === 'RETURN') {
-      newInventory.currentStock += quantity;
-    }
-    await newInventory.save();
+    const populated = await populateTransaction(updated);
 
-    transaction.type = type;
-    transaction.employee = employee || null;
-    transaction.site = site;
-    transaction.item = item;
-    transaction.quantity = quantity;
-    transaction.returnDetails = returnDetails;
-    transaction.relatedTo = relatedTo;
-
-    await transaction.save();
-    const populated = await Transaction.findById(transaction._id)
-      .populate('employee', 'fullName username email')
-      .populate('site', 'siteName siteCode')
-      .populate('item', 'name sku');
-    
     await createLog('EDIT_TRANSACTION', req.user.id, req.user.username, `Edited transaction: ${transaction.transactionId}`);
     if (global.io) {
       global.io.emit('transaction:updated', populated);
@@ -154,35 +201,29 @@ router.put('/:id', authMiddleware, checkPermission('editTransactions'), async (r
     res.json(populated);
   } catch (err) {
     console.error('Update transaction error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    const status = err.message === 'Item not found' ? 404 : 500;
+    res.status(status).json({ error: status === 404 ? 'Item not found' : 'Internal server error' });
   }
 });
 
-router.delete('/:id', authMiddleware, checkPermission('deleteTransactions'), async (req, res) => {
+router.delete('/:id', checkPermission('deleteTransactions'), async (req, res) => {
   try {
-    const transaction = await Transaction.findById(req.params.id);
+    const transaction = await fetchById('transactions', req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
-    const inventory = await Inventory.findById(transaction.item);
-    if (inventory) {
-      if (transaction.type === 'ISSUE') {
-        inventory.currentStock += transaction.quantity;
-      } else if (transaction.type === 'RETURN') {
-        inventory.currentStock -= transaction.quantity;
-      }
-      await inventory.save();
-    }
+    await applyTransactionStock(transaction.item, transaction.quantity, transaction.type, true);
+    await deleteRow('transactions', req.params.id);
 
     await createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`);
-    
-    await Transaction.findByIdAndDelete(req.params.id);
+
     if (global.io) {
       global.io.emit('transaction:deleted', { id: req.params.id });
     }
     res.json({ message: 'Transaction deleted' });
   } catch (err) {
     console.error('Delete transaction error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    const status = err.message === 'Item not found' ? 404 : 500;
+    res.status(status).json({ error: status === 404 ? 'Item not found' : 'Internal server error' });
   }
 });
 

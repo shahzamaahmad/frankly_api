@@ -1,14 +1,35 @@
 const express = require('express');
-const router = express.Router();
-const User = require('../models/user');
-const { authMiddleware } = require('../middlewares/auth');
+const { fetchMany } = require('../lib/db');
 
-router.get('/', authMiddleware, async (req, res) => {
+const router = express.Router();
+
+router.get('/', async (req, res) => {
   try {
-    const users = await User.find({ isActive: true })
-      .select('username fullName firstName lastName role phone email profilePictureUrl')
-      .sort({ role: 1, fullName: 1 });
-    res.json(users);
+    const users = await fetchMany('users', {
+      filters: [{ column: 'isActive', operator: 'eq', value: true }],
+      orderBy: 'role',
+      ascending: true,
+    });
+
+    const contacts = users
+      .map((user) => ({
+        _id: user._id,
+        username: user.username,
+        fullName: user.fullName,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        phone: user.phone,
+        email: user.email,
+        profilePictureUrl: user.profilePictureUrl,
+      }))
+      .sort((left, right) => {
+        const roleCompare = String(left.role || '').localeCompare(String(right.role || ''));
+        if (roleCompare !== 0) return roleCompare;
+        return String(left.fullName || '').localeCompare(String(right.fullName || ''));
+      });
+
+    res.json(contacts);
   } catch (error) {
     console.error('Fetch contacts error:', error);
     res.status(500).json({ message: 'Server error' });

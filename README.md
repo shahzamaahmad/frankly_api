@@ -1,5 +1,7 @@
 # API Endpoints (Dictionary)
 
+This backend now uses Supabase as its database layer while keeping the existing REST API contract used by the Flutter app.
+
 All endpoints are prefixed with `/api` and most require Authorization header: `Authorization: Bearer <token>` (except `/api/auth/*`).
 
 ## Auth
@@ -34,7 +36,7 @@ All endpoints are prefixed with `/api` and most require Authorization header: `A
 ## Transactions
 
 - POST /api/transactions
-  - Body: { transactionId, taker, site (ObjectId) OR siteName (string), outDate, inDate, returnee, remark }
+  - Body: { transactionId, taker, site (string id) OR siteName (string), outDate, inDate, returnee, remark }
   - If siteName provided and site not exists — site will be created automatically
 - GET /api/transactions
 - GET /api/transactions/:id
@@ -44,7 +46,7 @@ All endpoints are prefixed with `/api` and most require Authorization header: `A
 ## Transaction Items
 
 - POST /api/transaction-items
-  - Body: { transactionItemId, transactionId (ObjectId), item (ObjectId) OR itemSku (string), outQuantity, inQuantity, outDate, inDate, remark }
+  - Body: { transactionItemId, transactionId (string id), item (string id) OR itemSku (string), outQuantity, inQuantity, outDate, inDate, remark }
 - GET /api/transaction-items?transactionId=...
 - GET /api/transaction-items/:id
 - PUT /api/transaction-items/:id
@@ -63,7 +65,7 @@ All endpoints are prefixed with `/api` and most require Authorization header: `A
 ## Delivery Items
 
 - POST /api/delivery-items
-  - Body: { deliveryItemId, deliveryId (ObjectId), item (ObjectId) OR itemSku (string), quantity }
+  - Body: { deliveryItemId, deliveryId (string id), item (string id) OR itemSku (string), quantity }
 - GET /api/delivery-items?deliveryId=...
 - GET /api/delivery-items/:id
 - PUT /api/delivery-items/:id
@@ -71,6 +73,6 @@ All endpoints are prefixed with `/api` and most require Authorization header: `A
 
 ## Notes / Tips
 
-- Images and invoices are stored as binary buffer in MongoDB. For large files or production you might prefer storing files in S3 (or similar) and saving URLs in DB.
-- All models use `timestamps: true`, so createdAt and updatedAt fields are maintained automatically by Mongoose.
+- Images and invoices are stored as Cloudinary URLs in the API records.
+- The backend reads and writes Supabase tables directly and preserves the same JSON response shapes expected by the Flutter app.
 - Protect your `JWT_SECRET` and production DB credentials; do not commit `.env` to source control.

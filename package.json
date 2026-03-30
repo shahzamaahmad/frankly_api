@@ -1,7 +1,7 @@
 {
   "name": "inventory-backend",
   "version": "1.0.0",
-  "description": "Inventory backend (Express + Mongoose) with JWT auth - generated",
+  "description": "Inventory backend (Express + Supabase) with JWT auth",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -10,6 +10,7 @@
     "format": "prettier --write \"src/**/*.js\""
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
     "axios": "^1.6.0",
     "bcrypt": "^5.1.0",
     "cloudinary": "^1.37.2",
@@ -18,7 +19,6 @@
     "dotenv": "^16.1.4",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^7.5.0",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "socket.io": "^4.8.1",

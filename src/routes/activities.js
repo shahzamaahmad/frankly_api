@@ -1,48 +1,69 @@
 const express = require('express');
+const { ID_COLUMN, fetchMany, indexById, insertRow, uniqueIds } = require('../lib/db');
+
 const router = express.Router();
-const Activity = require('../models/activity');
-const { authMiddleware } = require('../middlewares/auth');
 
-// Get recent activities (last 50)
-router.get('/recent', authMiddleware, async (req, res) => {
+async function populateActivities(activities) {
+  if (!activities.length) {
+    return [];
+  }
+
+  const userIds = uniqueIds(activities.map((activity) => activity.user));
+  const users = userIds.length
+    ? await fetchMany('users', { filters: [{ column: ID_COLUMN, operator: 'in', value: userIds }] })
+    : [];
+  const userMap = indexById(users.map((user) => ({
+    _id: user._id,
+    fullName: user.fullName,
+    username: user.username,
+  })));
+
+  return activities.map((activity) => ({
+    ...activity,
+    user: activity.user ? (userMap.get(String(activity.user)) || activity.user) : activity.user,
+  }));
+}
+
+router.get('/recent', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 50;
-    const activities = await Activity.find()
-      .populate('user', 'fullName username')
-      .sort({ createdAt: -1 })
-      .limit(limit);
+    const limit = Number.parseInt(req.query.limit, 10) || 50;
+    const activities = await fetchMany('activities', {
+      orderBy: 'createdAt',
+      ascending: false,
+      limit,
+    });
+    res.json(await populateActivities(activities));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get('/my', async (req, res) => {
+  try {
+    const limit = Number.parseInt(req.query.limit, 10) || 50;
+    const activities = await fetchMany('activities', {
+      filters: [{ column: 'user', operator: 'eq', value: req.user.id }],
+      orderBy: 'createdAt',
+      ascending: false,
+      limit,
+    });
     res.json(activities);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Get user activities
-router.get('/my', authMiddleware, async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 50;
-    const activities = await Activity.find({ user: req.user.userId })
-      .sort({ createdAt: -1 })
-      .limit(limit);
-    res.json(activities);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Log activity (internal use)
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { action, itemType, itemId, itemName, details } = req.body;
-    const activity = new Activity({
-      user: req.user.userId,
+    const activity = await insertRow('activities', {
+      user: req.user.id,
       action,
       itemType,
       itemId,
       itemName,
       details,
     });
-    await activity.save();
     res.status(201).json(activity);
   } catch (error) {
     res.status(400).json({ message: error.message });
