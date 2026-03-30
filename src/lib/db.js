@@ -20,6 +20,7 @@ const tableCandidates = {
 
 const resolvedTables = new Map();
 const resolvedIdColumns = new Map();
+const resolvedColumns = new Map();
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -102,15 +103,17 @@ function preparePayload(payload) {
   return deepTransformKeys(serialized, toSnakeCase);
 }
 
-function applyTimestamps(payload, { forInsert = false } = {}) {
+function applyTimestamps(payload, availableColumns = {}, { forInsert = false } = {}) {
   const now = new Date().toISOString();
   const nextPayload = { ...payload };
+  const canWriteCreatedAt = availableColumns.createdAt !== false;
+  const canWriteUpdatedAt = availableColumns.updatedAt !== false;
 
-  if (forInsert && nextPayload.createdAt === undefined) {
+  if (forInsert && canWriteCreatedAt && nextPayload.createdAt === undefined) {
     nextPayload.createdAt = now;
   }
 
-  if (nextPayload.updatedAt === undefined) {
+  if (canWriteUpdatedAt && nextPayload.updatedAt === undefined) {
     nextPayload.updatedAt = now;
   }
 
@@ -134,6 +137,22 @@ function getIdColumnCandidates() {
 
 function isIdColumnReference(column) {
   return getIdColumnCandidates().includes(column);
+}
+
+function isSimpleColumnName(column) {
+  return typeof column === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(column);
+}
+
+function normalizeColumnName(column, idColumn) {
+  if (!column || !isSimpleColumnName(column)) {
+    return column;
+  }
+
+  if (isIdColumnReference(column)) {
+    return idColumn;
+  }
+
+  return USE_SNAKE_CASE ? toSnakeCase(column) : column;
 }
 
 function withId(payload, idColumn) {
@@ -201,12 +220,31 @@ async function normalizeFilters(entity, filters = []) {
 
   const idColumn = await resolveIdColumn(entity);
   return filters.map((filter) => {
-    if (!filter || !filter.column || !isIdColumnReference(filter.column)) {
+    if (!filter || !filter.column || filter.operator === 'or') {
       return filter;
     }
 
-    return { ...filter, column: idColumn };
+    return { ...filter, column: normalizeColumnName(filter.column, idColumn) };
   });
+}
+
+async function hasColumn(entity, column) {
+  if (!column || !isSimpleColumnName(column)) {
+    return false;
+  }
+
+  const [table, idColumn] = await Promise.all([resolveTable(entity), resolveIdColumn(entity)]);
+  const actualColumn = normalizeColumnName(column, idColumn);
+  const cacheKey = `${entity}:${actualColumn}`;
+
+  if (resolvedColumns.has(cacheKey)) {
+    return resolvedColumns.get(cacheKey);
+  }
+
+  const { error } = await getSupabaseAdmin().from(table).select(actualColumn).limit(1);
+  const exists = !error;
+  resolvedColumns.set(cacheKey, exists);
+  return exists;
 }
 
 function applyFilters(query, filters = []) {
@@ -250,6 +288,37 @@ function applyFilters(query, filters = []) {
   return nextQuery;
 }
 
+function extractMissingColumn(error) {
+  if (!error || error.code !== 'PGRST204' || typeof error.message !== 'string') {
+    return null;
+  }
+
+  const match = error.message.match(/Could not find the '([^']+)' column of '[^']+' in the schema cache/);
+  return match ? match[1] : null;
+}
+
+async function executeWriteWithColumnFallback(record, operation) {
+  let currentRecord = { ...record };
+  let attempts = 0;
+
+  while (attempts < 20) {
+    const { data, error } = await operation(currentRecord);
+    if (!error) {
+      return data;
+    }
+
+    const missingColumn = extractMissingColumn(error);
+    if (!missingColumn || !Object.prototype.hasOwnProperty.call(currentRecord, missingColumn)) {
+      throw error;
+    }
+
+    delete currentRecord[missingColumn];
+    attempts += 1;
+  }
+
+  throw new Error('Supabase write failed after removing unsupported columns');
+}
+
 async function fetchMany(entity, options = {}) {
   const {
     select = '*',
@@ -264,11 +333,14 @@ async function fetchMany(entity, options = {}) {
     resolveIdColumn(entity),
     normalizeFilters(entity, filters),
   ]);
+  const normalizedOrderBy = orderBy && await hasColumn(entity, orderBy)
+    ? normalizeColumnName(orderBy, idColumn)
+    : null;
   let query = getSupabaseAdmin().from(table).select(select);
   query = applyFilters(query, normalizedFilters);
 
-  if (orderBy) {
-    query = query.order(isIdColumnReference(orderBy) ? idColumn : orderBy, { ascending });
+  if (normalizedOrderBy) {
+    query = query.order(normalizedOrderBy, { ascending });
   }
 
   if (limit) {
@@ -299,37 +371,39 @@ async function fetchById(entity, id, options = {}) {
 async function insertRow(entity, payload, options = {}) {
   const { select = '*', timestamps = true } = options;
   const [table, idColumn] = await Promise.all([resolveTable(entity), resolveIdColumn(entity)]);
-  const basePayload = timestamps ? applyTimestamps(payload, { forInsert: true }) : { ...payload };
+  const availableColumns = {
+    createdAt: await hasColumn(entity, 'createdAt'),
+    updatedAt: await hasColumn(entity, 'updatedAt'),
+  };
+  const basePayload = timestamps ? applyTimestamps(payload, availableColumns, { forInsert: true }) : { ...payload };
   const record = preparePayload(withId(basePayload, idColumn));
-  const { data, error } = await getSupabaseAdmin()
-    .from(table)
-    .insert(record)
-    .select(select)
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
+  const data = await executeWriteWithColumnFallback(record, (currentRecord) => (
+    getSupabaseAdmin()
+      .from(table)
+      .insert(currentRecord)
+      .select(select)
+      .single()
+  ));
   return normalizeRow(data);
 }
 
 async function updateRow(entity, id, payload, options = {}) {
   const { select = '*', timestamps = true } = options;
   const [table, idColumn] = await Promise.all([resolveTable(entity), resolveIdColumn(entity)]);
-  const nextPayload = timestamps ? applyTimestamps(payload) : { ...payload };
+  const availableColumns = {
+    createdAt: await hasColumn(entity, 'createdAt'),
+    updatedAt: await hasColumn(entity, 'updatedAt'),
+  };
+  const nextPayload = timestamps ? applyTimestamps(payload, availableColumns) : { ...payload };
   const record = preparePayload(nextPayload);
-  const { data, error } = await getSupabaseAdmin()
-    .from(table)
-    .update(record)
-    .eq(idColumn, id)
-    .select(select)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-
+  const data = await executeWriteWithColumnFallback(record, (currentRecord) => (
+    getSupabaseAdmin()
+      .from(table)
+      .update(currentRecord)
+      .eq(idColumn, id)
+      .select(select)
+      .maybeSingle()
+  ));
   return normalizeRow(data);
 }
 
@@ -395,6 +469,7 @@ module.exports = {
   insertRow,
   normalizeRow,
   preparePayload,
+  hasColumn,
   resolveIdColumn,
   resolveTable,
   uniqueIds,

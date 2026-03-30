@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 
 let supabaseAdmin = null;
+let supabaseAuth = null;
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -10,15 +11,14 @@ function requireEnv(name) {
   return value;
 }
 
-function getSupabaseAdmin() {
-  if (supabaseAdmin) {
-    return supabaseAdmin;
-  }
+function getPublicKey() {
+  return process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || null;
+}
 
+function createSupabaseClient(key, clientInfo) {
   const supabaseUrl = requireEnv('SUPABASE_URL');
-  const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
 
-  supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+  return createClient(supabaseUrl, key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -26,12 +26,38 @@ function getSupabaseAdmin() {
     },
     global: {
       headers: {
-        'X-Client-Info': 'warehouse-manager-api',
+        'X-Client-Info': clientInfo,
       },
     },
   });
+}
+
+function getSupabaseAdmin() {
+  if (supabaseAdmin) {
+    return supabaseAdmin;
+  }
+
+  const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
+  supabaseAdmin = createSupabaseClient(serviceRoleKey, 'warehouse-manager-api');
 
   return supabaseAdmin;
 }
 
-module.exports = { getSupabaseAdmin };
+function getSupabaseAuth() {
+  if (supabaseAuth) {
+    return supabaseAuth;
+  }
+
+  const publicKey = getPublicKey();
+  if (!publicKey) {
+    throw new Error('SUPABASE_ANON_KEY or SUPABASE_PUBLISHABLE_KEY is required for Supabase Auth');
+  }
+
+  supabaseAuth = createSupabaseClient(publicKey, 'warehouse-manager-auth');
+  return supabaseAuth;
+}
+
+module.exports = {
+  getSupabaseAdmin,
+  getSupabaseAuth,
+};

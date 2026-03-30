@@ -16,7 +16,8 @@ const express = loadRoute('express');
 const cors = loadRoute('cors');
 const swaggerUi = loadRoute('swagger-ui-express');
 const swaggerSpec = loadRoute('./swagger');
-const { getSupabaseAdmin } = loadRoute('./lib/supabase');
+const { getSupabaseAdmin, getSupabaseAuth } = loadRoute('./lib/supabase');
+const { verifyAccessToken } = loadRoute('./lib/auth');
 
 
 
@@ -112,6 +113,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 4000;
 getSupabaseAdmin();
+getSupabaseAuth();
 
 const http = require('http');
 const socketIo = require('socket.io');
@@ -120,16 +122,14 @@ const io = socketIo(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
-const jwt = require('jsonwebtoken');
-
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const token = socket.handshake.auth.token;
   if (!token) {
     return next(new Error('Authentication error'));
   }
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.userId = decoded.id;
+    const { user } = await verifyAccessToken(token);
+    socket.userId = user.id;
     next();
   } catch (err) {
     next(new Error('Authentication error'));

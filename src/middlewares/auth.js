@@ -1,6 +1,4 @@
-const jwt = require('jsonwebtoken');
-const { fetchById } = require('../lib/db');
-const { sanitizeUser } = require('../lib/users');
+const { verifyAccessToken } = require('../lib/auth');
 
 const authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -8,8 +6,7 @@ const authMiddleware = async (req, res, next) => {
   const token = authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'Please login and try again' });
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = sanitizeUser(await fetchById('users', decoded.id));
+    const { user } = await verifyAccessToken(token);
     if (!user) return res.status(401).json({ message: 'Please login and try again' });
     if (!user.isActive) {
       return res.status(403).json({ message: 'Account is deactivated' });

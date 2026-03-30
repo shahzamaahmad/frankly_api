@@ -1,6 +1,7 @@
 const express = require('express');
 const { fetchById, fetchMany, deleteRow, updateRow } = require('../lib/db');
-const { buildFullName, hashPassword, sanitizeUser } = require('../lib/users');
+const { deleteSupabaseUser, updateSupabaseUser } = require('../lib/auth');
+const { buildFullName, sanitizeUser } = require('../lib/users');
 const checkPermission = require('../middlewares/checkPermission');
 
 const router = express.Router();
@@ -49,7 +50,21 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
       JSON.stringify(currentUser.permissions || {}) !== JSON.stringify(updates.permissions);
 
     if (updates.password) {
-      updates.password = await hashPassword(updates.password);
+      await updateSupabaseUser(currentUser, {
+        password: updates.password,
+        email: updates.email,
+        username: updates.username,
+        fullName: updates.fullName,
+        role: updates.role,
+      });
+      delete updates.password;
+    } else {
+      await updateSupabaseUser(currentUser, {
+        email: updates.email,
+        username: updates.username,
+        fullName: updates.fullName,
+        role: updates.role,
+      });
     }
 
     delete updates._id;
@@ -73,12 +88,16 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
   }
 });
 
-router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
+  router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
   try {
     if (req.params.id === req.user.id) {
       return res.status(400).json({ message: 'Cannot delete your own account' });
     }
 
+    const existingUser = await fetchById('users', req.params.id);
+    if (!existingUser) return res.status(404).json({ message: 'User not found' });
+
+    await deleteSupabaseUser(existingUser);
     const user = await deleteRow('users', req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json({ message: 'User deleted successfully' });
