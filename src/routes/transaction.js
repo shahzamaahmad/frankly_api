@@ -1,5 +1,5 @@
 const express = require('express');
-const { fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
+const { ID_COLUMN, fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
 const { getSupabaseAdmin } = require('../lib/supabase');
 const checkPermission = require('../middlewares/checkPermission');
 const { createLog } = require('../utils/logger');
@@ -8,6 +8,55 @@ const router = express.Router();
 
 const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
 
+async function fetchUserSummaries(ids) {
+  const userIds = uniqueIds(ids);
+  if (!userIds.length) {
+    return new Map();
+  }
+
+  const users = await fetchMany('users', {
+    filters: [{ column: ID_COLUMN, operator: 'in', value: userIds }],
+  });
+
+  return indexById(users.map((user) => ({
+    id: user.id || user._id,
+    username: user.username,
+    fullName: user.fullName,
+  })));
+}
+
+function getTransactionEmployeeId(transaction) {
+  return transaction.employeeId || transaction.employee_id || transaction.employee || null;
+}
+
+async function buildTransactionWritePayload(body) {
+  const payload = {
+    type: body.type,
+    siteId: body.site,
+    inventoryId: body.item,
+    quantity: Number(body.quantity),
+    returnCondition: body.returnDetails?.condition || null,
+  };
+
+  const employeeId = body.employee || null;
+  if (!employeeId) {
+    return payload;
+  }
+
+  if (await hasColumn('transactions', 'employeeId')) {
+    payload.employeeId = employeeId;
+  } else if (await hasColumn('transactions', 'employee')) {
+    payload.employee = employeeId;
+  }
+
+  if (await hasColumn('transactions', 'employeeName')) {
+    const employee = await fetchById('users', employeeId);
+    payload.employeeName = employee?.fullName || employee?.username || null;
+  }
+
+  return payload;
+}
+
 async function populateTransactions(transactions) {
   if (!transactions.length) {
     return [];
@@ -15,10 +64,12 @@ async function populateTransactions(transactions) {
 
   const siteIds = uniqueIds(transactions.map((transaction) => transaction.siteId));
   const itemIds = uniqueIds(transactions.map((transaction) => transaction.inventoryId));
+  const employeeIds = uniqueIds(transactions.map((transaction) => getTransactionEmployeeId(transaction)));
 
-  const [sites, items] = await Promise.all([
+  const [sites, items, employees] = await Promise.all([
     siteIds.length ? fetchMany('sites', { filters: [{ column: 'id', operator: 'in', value: siteIds }] }) : [],
     itemIds.length ? fetchMany('inventory', { filters: [{ column: 'id', operator: 'in', value: itemIds }] }) : [],
+    fetchUserSummaries(employeeIds),
   ]);
 
   const siteMap = indexById(sites.map((site) => ({
@@ -32,14 +83,19 @@ async function populateTransactions(transactions) {
     sku: item.sku,
   })));
 
-  return transactions.map((transaction) => ({
+  return transactions.map((transaction) => {
+    const employeeId = getTransactionEmployeeId(transaction);
+    const employee = employeeId ? (employees.get(String(employeeId)) || employeeId) : null;
+
+    return ({
     ...transaction,
-    employee: transaction.employee || null,
+    employee,
     site: transaction.siteId ? (siteMap.get(String(transaction.siteId)) || transaction.siteId) : transaction.siteId,
     item: transaction.inventoryId ? (itemMap.get(String(transaction.inventoryId)) || transaction.inventoryId) : transaction.inventoryId,
     timestamp: transaction.eventTimestamp || transaction.timestamp,
     returnDetails: transaction.returnCondition ? { condition: transaction.returnCondition } : null,
-  }));
+    });
+  });
 }
 
 async function populateTransaction(transaction) {
@@ -154,7 +210,7 @@ router.get('/:id', checkPermission('viewTransactions'), async (req, res) => {
 
 router.post('/', checkPermission('addTransactions'), async (req, res) => {
   try {
-    const { type, site, item, quantity, returnDetails, timestamp } = req.body;
+    const { type, site, item, quantity, timestamp } = req.body;
 
     if (!type || !site || !item || !quantity || Number(quantity) <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
@@ -166,14 +222,11 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
       return res.status(404).json({ error: 'Item not found' });
     }
 
+    const writePayload = await buildTransactionWritePayload(req.body);
     const transaction = await insertRow('transactions', {
       transactionId,
-      type,
-      siteId: site,
-      inventoryId: item,
-      quantity: Number(quantity),
-      returnCondition: returnDetails?.condition || null,
       eventTimestamp: createdTimestamp,
+      ...writePayload,
     });
     await recalculateInventoryStocks([item]);
 
@@ -195,7 +248,7 @@ router.put('/:id', checkPermission('editTransactions'), async (req, res) => {
     const transaction = await fetchById('transactions', req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
-    const { type, site, item, quantity, returnDetails } = req.body;
+    const { type, site, item, quantity } = req.body;
 
     if (!type || !site || !item || !quantity || Number(quantity) <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
@@ -206,13 +259,8 @@ router.put('/:id', checkPermission('editTransactions'), async (req, res) => {
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    const updated = await updateRow('transactions', req.params.id, {
-      type,
-      siteId: site,
-      inventoryId: item,
-      quantity: Number(quantity),
-      returnCondition: returnDetails?.condition || null,
-    });
+    const writePayload = await buildTransactionWritePayload(req.body);
+    const updated = await updateRow('transactions', req.params.id, writePayload);
     await recalculateInventoryStocks([transaction.inventoryId, item]);
 
     const populated = await populateTransaction(updated);
