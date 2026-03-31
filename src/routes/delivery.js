@@ -45,8 +45,10 @@ function normalizeItems(items) {
       inventoryId: readItemId(item),
       quantity: Number(item?.quantity || 0),
       siteId: item?.site || item?.siteId || null,
+      customItemName: (item?.customItemName || item?.itemNameText || item?.name || '').trim(),
+      customItemSku: (item?.customItemSku || item?.sku || '').trim(),
     }))
-    .filter((item) => item.inventoryId && item.quantity > 0);
+    .filter((item) => (item.inventoryId || item.customItemName) && item.quantity > 0);
 }
 
 async function uploadInvoice(req, body) {
@@ -126,16 +128,32 @@ async function syncDeliveryItems(deliveryId, items) {
   if (!supportsSiteId && items.some((item) => item.siteId)) {
     throw new Error('delivery_items.site_id column is required to save site-specific delivery lines');
   }
+  const supportsCustomItemName = await hasColumn('deliveryItems', 'itemName');
+  const supportsCustomItemSku = await hasColumn('deliveryItems', 'itemSku');
+  const hasCustomItems = items.some((item) => !item.inventoryId && item.customItemName);
+  if (!supportsCustomItemName && hasCustomItems) {
+    throw new Error('delivery_items.item_name column is required to save custom delivery lines');
+  }
 
   const payload = items.map((item) => ({
     delivery_id: deliveryId,
-    inventory_id: item.inventoryId,
+    inventory_id: item.inventoryId || null,
     quantity: item.quantity,
   }));
 
   if (supportsSiteId) {
     for (const [index, entry] of payload.entries()) {
       entry.site_id = items[index]?.siteId || null;
+    }
+  }
+  if (supportsCustomItemName) {
+    for (const [index, entry] of payload.entries()) {
+      entry.item_name = items[index]?.customItemName || null;
+    }
+  }
+  if (supportsCustomItemSku) {
+    for (const [index, entry] of payload.entries()) {
+      entry.item_sku = items[index]?.customItemSku || null;
     }
   }
 
@@ -229,7 +247,12 @@ async function populateDeliveries(deliveries) {
     return {
       ...delivery,
       items: currentItems.map((item) => ({
-        itemName: inventoryMap.get(String(item.inventory_id)) || item.inventory_id,
+        itemName: item.inventory_id
+          ? (inventoryMap.get(String(item.inventory_id)) || item.inventory_id)
+          : {
+            name: item.item_name || 'Custom Item',
+            sku: item.item_sku || '',
+          },
         quantity: Number(item.quantity || 0),
         site: item.site_id ? (siteMap.get(String(item.site_id)) || item.site_id) : null,
       })),
@@ -275,7 +298,7 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
     res.status(201).json(populated);
   } catch (err) {
     console.error('Create delivery error:', err);
-    res.status(400).json({ error: 'Failed to create delivery' });
+    res.status(400).json({ error: err.message || 'Failed to create delivery' });
   }
 });
 
@@ -349,7 +372,7 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
     res.json(populated);
   } catch (err) {
     console.error('Update delivery error:', err);
-    res.status(400).json({ error: 'Failed to update delivery' });
+    res.status(400).json({ error: err.message || 'Failed to update delivery' });
   }
 });
 
