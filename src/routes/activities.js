@@ -24,6 +24,32 @@ async function populateActivities(activities) {
   }));
 }
 
+router.get('/', async (req, res) => {
+  try {
+    const limit = Number.parseInt(req.query.limit, 10) || 100;
+    const filters = [];
+
+    if (typeof req.query.itemType === 'string' && req.query.itemType.trim().isNotEmpty) {
+      filters.push({ column: 'itemType', operator: 'eq', value: req.query.itemType.trim() });
+    }
+
+    if (typeof req.query.itemId === 'string' && req.query.itemId.trim().isNotEmpty) {
+      filters.push({ column: 'itemId', operator: 'eq', value: req.query.itemId.trim() });
+    }
+
+    const activities = await fetchMany('activities', {
+      filters,
+      orderBy: 'createdAt',
+      ascending: false,
+      limit,
+    });
+
+    res.json(await populateActivities(activities));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 router.get('/recent', async (req, res) => {
   try {
     const limit = Number.parseInt(req.query.limit, 10) || 50;
