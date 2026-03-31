@@ -81,6 +81,7 @@ function normalizeItems(items) {
         siteId: readEntityId(item?.site) || readEntityId(item?.siteId) || null,
         customItemName: (item?.customItemName || item?.itemNameText || item?.name || nestedItemName || '').trim(),
         customItemSku: (item?.customItemSku || item?.sku || nestedItemSku || '').trim(),
+        customItemCategory: (item?.customItemCategory || item?.category || (typeof itemNameValue === 'object' ? itemNameValue.category : '') || '').trim(),
         isIssuedToSite: toBoolean(item?.isIssuedToSite),
         issuedAt: item?.issuedAt || null,
       };
@@ -167,11 +168,15 @@ async function syncDeliveryItems(deliveryId, items) {
   }
   const supportsCustomItemName = await hasColumn('deliveryItems', 'itemName');
   const supportsCustomItemSku = await hasColumn('deliveryItems', 'itemSku');
+  const supportsCustomItemCategory = await hasColumn('deliveryItems', 'itemCategory');
   const supportsIssuedStatus = await hasColumn('deliveryItems', 'isIssuedToSite');
   const supportsIssuedAt = await hasColumn('deliveryItems', 'issuedAt');
   const hasCustomItems = items.some((item) => !item.inventoryId && item.customItemName);
   if (!supportsCustomItemName && hasCustomItems) {
     throw new Error('delivery_items.item_name column is required to save custom delivery lines');
+  }
+  if (!supportsCustomItemCategory && items.some((item) => item.customItemCategory)) {
+    throw new Error('delivery_items.item_category column is required to save custom delivery item categories');
   }
   if (!supportsIssuedStatus && items.some((item) => item.isIssuedToSite)) {
     throw new Error('delivery_items.is_issued_to_site column is required to save issued delivery status');
@@ -199,6 +204,11 @@ async function syncDeliveryItems(deliveryId, items) {
   if (supportsCustomItemSku) {
     for (const [index, entry] of payload.entries()) {
       entry.item_sku = items[index]?.customItemSku || null;
+    }
+  }
+  if (supportsCustomItemCategory) {
+    for (const [index, entry] of payload.entries()) {
+      entry.item_category = items[index]?.customItemCategory || null;
     }
   }
   if (supportsIssuedStatus) {
@@ -305,11 +315,13 @@ async function populateDeliveries(deliveries) {
         itemName: item.inventory_id
           ? (inventoryMap.get(String(item.inventory_id)) || item.inventory_id)
           : {
-            name: item.item_name || 'Custom Item',
-            sku: item.item_sku || '',
-          },
+              name: item.item_name || 'Custom Item',
+              sku: item.item_sku || '',
+              category: item.item_category || '',
+            },
         quantity: Number(item.quantity || 0),
         site: item.site_id ? (siteMap.get(String(item.site_id)) || item.site_id) : null,
+        customItemCategory: item.item_category || null,
         isIssuedToSite: item.is_issued_to_site === true,
         issuedAt: item.issued_at || null,
       })),
