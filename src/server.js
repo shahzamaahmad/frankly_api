@@ -21,7 +21,7 @@ const { getSupabaseAdmin, getSupabaseAuth } = loadRoute('./lib/supabase');
 let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes;
 let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
 let logRoutes, onesignalRoutes, contactsRoutes, appConfigRoutes, notificationsRoutes;
-let favoritesRoutes, activitiesRoutes;
+let activitiesRoutes;
 
 const initRoutes = () => {
   authRoutes = loadRoute('./routes/auth');
@@ -37,7 +37,6 @@ const initRoutes = () => {
   contactsRoutes = loadRoute('./routes/contacts');
   appConfigRoutes = loadRoute('./routes/appConfig');
   notificationsRoutes = loadRoute('./routes/notifications');
-  favoritesRoutes = loadRoute('./routes/favorites');
   activitiesRoutes = loadRoute('./routes/activities');
 };
 
@@ -89,7 +88,6 @@ try {
   app.use('/api/contacts', authMiddleware, contactsRoutes);
   app.use('/api/app-config', appConfigRoutes);
   app.use('/api/notifications', authMiddleware, notificationsRoutes);
-  app.use('/api/favorites', authMiddleware, favoritesRoutes);
   app.use('/api/activities', authMiddleware, activitiesRoutes);
 } catch (err) {
   console.error('Route setup error:', err);

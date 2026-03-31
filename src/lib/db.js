@@ -12,7 +12,6 @@ const tableCandidates = {
   deliveries: [process.env.SUPABASE_TABLE_DELIVERIES, 'deliveries', 'delivery'],
   attendance: [process.env.SUPABASE_TABLE_ATTENDANCE, 'attendance', 'attendances'],
   notifications: [process.env.SUPABASE_TABLE_NOTIFICATIONS, 'notifications', 'notification'],
-  favorites: [process.env.SUPABASE_TABLE_FAVORITES, 'favorites', 'favorite'],
   logs: [process.env.SUPABASE_TABLE_LOGS, 'logs', 'log'],
   activities: [process.env.SUPABASE_TABLE_ACTIVITIES, 'activities', 'activity'],
   appConfig: [process.env.SUPABASE_TABLE_APP_CONFIG, 'app_config', 'app_configs', 'appConfig'],
