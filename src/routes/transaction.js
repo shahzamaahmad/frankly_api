@@ -38,6 +38,10 @@ async function buildTransactionWritePayload(body) {
     returnCondition: body.returnDetails?.condition || null,
   };
 
+  if (await hasColumn('transactions', 'notes')) {
+    payload.notes = body.returnDetails?.notes || null;
+  }
+
   const employeeId = body.employee || null;
   if (!employeeId) {
     return payload;
@@ -93,7 +97,12 @@ async function populateTransactions(transactions) {
     site: transaction.siteId ? (siteMap.get(String(transaction.siteId)) || transaction.siteId) : transaction.siteId,
     item: transaction.inventoryId ? (itemMap.get(String(transaction.inventoryId)) || transaction.inventoryId) : transaction.inventoryId,
     timestamp: transaction.eventTimestamp || transaction.timestamp,
-    returnDetails: transaction.returnCondition ? { condition: transaction.returnCondition } : null,
+    returnDetails: (transaction.returnCondition || transaction.notes)
+      ? {
+        condition: transaction.returnCondition || 'Good',
+        notes: transaction.notes || null,
+      }
+      : null,
     });
   });
 }

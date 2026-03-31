@@ -34,6 +34,20 @@ function readItemId(item) {
   return item.itemName || item.inventoryId || item.itemId || item.id || null;
 }
 
+function toBoolean(value) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes';
+  }
+  return false;
+}
+
 function normalizeItems(items) {
   const source = typeof items === 'string' ? JSON.parse(items) : items;
   if (!Array.isArray(source)) {
@@ -47,6 +61,8 @@ function normalizeItems(items) {
       siteId: item?.site || item?.siteId || null,
       customItemName: (item?.customItemName || item?.itemNameText || item?.name || '').trim(),
       customItemSku: (item?.customItemSku || item?.sku || '').trim(),
+      isIssuedToSite: toBoolean(item?.isIssuedToSite),
+      issuedAt: item?.issuedAt || null,
     }))
     .filter((item) => (item.inventoryId || item.customItemName) && item.quantity > 0);
 }
@@ -130,9 +146,17 @@ async function syncDeliveryItems(deliveryId, items) {
   }
   const supportsCustomItemName = await hasColumn('deliveryItems', 'itemName');
   const supportsCustomItemSku = await hasColumn('deliveryItems', 'itemSku');
+  const supportsIssuedStatus = await hasColumn('deliveryItems', 'isIssuedToSite');
+  const supportsIssuedAt = await hasColumn('deliveryItems', 'issuedAt');
   const hasCustomItems = items.some((item) => !item.inventoryId && item.customItemName);
   if (!supportsCustomItemName && hasCustomItems) {
     throw new Error('delivery_items.item_name column is required to save custom delivery lines');
+  }
+  if (!supportsIssuedStatus && items.some((item) => item.isIssuedToSite)) {
+    throw new Error('delivery_items.is_issued_to_site column is required to save issued delivery status');
+  }
+  if (!supportsIssuedAt && items.some((item) => item.issuedAt)) {
+    throw new Error('delivery_items.issued_at column is required to save issued delivery timestamps');
   }
 
   const payload = items.map((item) => ({
@@ -154,6 +178,16 @@ async function syncDeliveryItems(deliveryId, items) {
   if (supportsCustomItemSku) {
     for (const [index, entry] of payload.entries()) {
       entry.item_sku = items[index]?.customItemSku || null;
+    }
+  }
+  if (supportsIssuedStatus) {
+    for (const [index, entry] of payload.entries()) {
+      entry.is_issued_to_site = items[index]?.isIssuedToSite === true;
+    }
+  }
+  if (supportsIssuedAt) {
+    for (const [index, entry] of payload.entries()) {
+      entry.issued_at = items[index]?.issuedAt || null;
     }
   }
 
@@ -255,6 +289,8 @@ async function populateDeliveries(deliveries) {
           },
         quantity: Number(item.quantity || 0),
         site: item.site_id ? (siteMap.get(String(item.site_id)) || item.site_id) : null,
+        isIssuedToSite: item.is_issued_to_site === true,
+        issuedAt: item.issued_at || null,
       })),
     };
   });
