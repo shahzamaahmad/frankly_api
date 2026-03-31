@@ -1,5 +1,6 @@
 const express = require('express');
 const { fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
+const { getSupabaseAdmin } = require('../lib/supabase');
 const checkPermission = require('../middlewares/checkPermission');
 const { createLog } = require('../utils/logger');
 
@@ -74,24 +75,51 @@ async function generateTransactionId(timestamp) {
   };
 }
 
-async function applyTransactionStock(itemId, quantity, type, reverse = false) {
+async function recalculateInventoryStock(itemId) {
   const inventory = await fetchById('inventory', itemId);
   if (!inventory) {
-    throw new Error('Item not found');
+    return;
   }
 
-  const signedQuantity = Number(quantity || 0) * (reverse ? -1 : 1);
-  let delta = 0;
+  const [transactions, deliveryItems] = await Promise.all([
+    fetchMany('transactions', {
+      filters: [{ column: 'inventoryId', operator: 'eq', value: itemId }],
+    }),
+    (async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from('delivery_items')
+        .select('quantity')
+        .eq('inventory_id', itemId);
 
-  if (type === 'ISSUE') {
-    delta = -signedQuantity;
-  } else if (type === 'RETURN') {
-    delta = signedQuantity;
+      if (error) {
+        throw error;
+      }
+
+      return data || [];
+    })(),
+  ]);
+
+  let totalDelivered = 0;
+  let totalIssued = 0;
+  let totalReturned = 0;
+
+  for (const item of deliveryItems) {
+    totalDelivered += Number(item.quantity || 0);
   }
 
-  return updateRow('inventory', itemId, {
-    currentStock: Number(inventory.currentStock || 0) + delta,
-  });
+  for (const transaction of transactions) {
+    if (transaction.type === 'ISSUE') totalIssued += Number(transaction.quantity || 0);
+    if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
+  }
+
+  const currentStock = Number(inventory.initialStock || 0) + totalDelivered - totalIssued + totalReturned;
+  await updateRow('inventory', itemId, { currentStock });
+}
+
+async function recalculateInventoryStocks(itemIds) {
+  for (const itemId of uniqueIds(itemIds)) {
+    await recalculateInventoryStock(itemId);
+  }
 }
 
 router.get('/', checkPermission('viewTransactions'), async (req, res) => {
@@ -133,7 +161,10 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
     }
 
     const { transactionId, timestamp: createdTimestamp } = await generateTransactionId(timestamp);
-    await applyTransactionStock(item, quantity, type);
+    const existingItem = await fetchById('inventory', item);
+    if (!existingItem) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
 
     const transaction = await insertRow('transactions', {
       transactionId,
@@ -144,6 +175,7 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
       returnCondition: returnDetails?.condition || null,
       eventTimestamp: createdTimestamp,
     });
+    await recalculateInventoryStocks([item]);
 
     const populated = await populateTransaction(transaction);
 
@@ -169,8 +201,10 @@ router.put('/:id', checkPermission('editTransactions'), async (req, res) => {
       return res.status(400).json({ error: 'Invalid input data' });
     }
 
-    await applyTransactionStock(transaction.inventoryId, transaction.quantity, transaction.type, true);
-    await applyTransactionStock(item, quantity, type);
+    const nextItem = await fetchById('inventory', item);
+    if (!nextItem) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
 
     const updated = await updateRow('transactions', req.params.id, {
       type,
@@ -179,6 +213,7 @@ router.put('/:id', checkPermission('editTransactions'), async (req, res) => {
       quantity: Number(quantity),
       returnCondition: returnDetails?.condition || null,
     });
+    await recalculateInventoryStocks([transaction.inventoryId, item]);
 
     const populated = await populateTransaction(updated);
 
@@ -198,8 +233,8 @@ router.delete('/:id', checkPermission('deleteTransactions'), async (req, res) =>
     const transaction = await fetchById('transactions', req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
-    await applyTransactionStock(transaction.inventoryId, transaction.quantity, transaction.type, true);
     await deleteRow('transactions', req.params.id);
+    await recalculateInventoryStocks([transaction.inventoryId]);
 
     createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`).catch((error) => {
       console.error('Log failed:', error);

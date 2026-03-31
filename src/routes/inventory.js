@@ -69,6 +69,47 @@ function normalizeInventoryPayload(body) {
   return payload;
 }
 
+async function calculateCurrentStock(itemId, initialStockOverride) {
+  const [transactions, deliveryItems] = await Promise.all([
+    fetchMany('transactions', {
+      filters: [{ column: 'inventoryId', operator: 'eq', value: itemId }],
+    }),
+    (async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from('delivery_items')
+        .select('inventory_id, quantity')
+        .eq('inventory_id', itemId);
+
+      if (error) {
+        throw error;
+      }
+
+      return data || [];
+    })(),
+  ]);
+
+  let totalIssued = 0;
+  let totalReturned = 0;
+  let totalDelivered = 0;
+
+  for (const transaction of transactions) {
+    if (transaction.type === 'ISSUE') totalIssued += Number(transaction.quantity || 0);
+    else if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
+  }
+
+  for (const deliveryItem of deliveryItems) {
+    totalDelivered += Number(deliveryItem.quantity || 0);
+  }
+
+  return Number(initialStockOverride || 0) + totalDelivered - totalIssued + totalReturned;
+}
+
+async function recalculateInventoryStock(itemId, initialStockOverride) {
+  const currentStock = await calculateCurrentStock(itemId, initialStockOverride);
+  await updateRow('inventory', itemId, { currentStock });
+  return currentStock;
+}
+
 async function uploadInventoryImage(req, body) {
   if (body.image && !body.imageUrl) {
     body.imageUrl = body.image;
@@ -147,14 +188,13 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
     await uploadInventoryImage(req, body);
 
     const data = normalizeInventoryPayload(body);
+    delete data.currentStock;
 
     if (!data.name || !data.sku || !data.category) {
       return res.status(400).json({ error: 'Item name, SKU, and category are required' });
     }
 
-    if (data.currentStock !== undefined && data.currentStock < 0) {
-      return res.status(400).json({ error: 'Stock cannot be negative' });
-    }
+    data.currentStock = Number(data.initialStock || 0);
 
     const inventory = await insertRow('inventory', data);
 
@@ -240,17 +280,26 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
 }, async (req, res) => {
   try {
     const body = { ...req.body };
+    const existing = await fetchById('inventory', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Inventory item not found' });
 
     await uploadInventoryImage(req, body);
 
     const shouldClearImage = typeof body.imageUrl === 'string' && body.imageUrl === '';
     const data = normalizeInventoryPayload(body);
+    delete data.currentStock;
     if (shouldClearImage) {
       data.imageUrl = null;
     }
 
     const updated = await updateRow('inventory', req.params.id, data);
     if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
+
+    const currentStock = await recalculateInventoryStock(
+      req.params.id,
+      updated.initialStock !== undefined ? updated.initialStock : existing.initialStock,
+    );
+    updated.currentStock = currentStock;
 
     createLog('EDIT_INVENTORY', req.user.id, req.user.username, `Updated item: ${updated.name}`).catch((error) => {
       console.error('Log failed:', error);
@@ -265,12 +314,16 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
 
 router.patch('/:id', checkPermission('editInventory'), async (req, res) => {
   try {
-    const allowedFields = ['currentStock', 'status', 'remark'];
+    const allowedFields = ['status', 'remark'];
     const updates = {};
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
-        updates[field] = field === 'currentStock' ? parseNumber(req.body[field]) : req.body[field];
+        updates[field] = req.body[field];
       }
+    }
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ error: 'No valid fields provided' });
     }
 
     const updated = await updateRow('inventory', req.params.id, updates);
@@ -306,40 +359,9 @@ router.post('/:id/recalculate', checkPermission('editInventory'), async (req, re
   try {
     const item = await fetchById('inventory', req.params.id);
     if (!item) return res.status(404).json({ error: 'Item not found' });
+    const currentStock = await recalculateInventoryStock(req.params.id, item.initialStock);
 
-    const [transactions, deliveryItems] = await Promise.all([
-      fetchMany('transactions', { filters: [{ column: 'inventoryId', operator: 'eq', value: req.params.id }] }),
-      (async () => {
-        const { data, error } = await getSupabaseAdmin()
-          .from('delivery_items')
-          .select('inventory_id, quantity')
-          .eq('inventory_id', req.params.id);
-
-        if (error) {
-          throw error;
-        }
-
-        return data || [];
-      })(),
-    ]);
-
-    let totalIssued = 0;
-    let totalReturned = 0;
-    let totalDelivered = 0;
-
-    for (const transaction of transactions) {
-      if (transaction.type === 'ISSUE') totalIssued += Number(transaction.quantity || 0);
-      else if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
-    }
-
-    for (const deliveryItem of deliveryItems) {
-      totalDelivered += Number(deliveryItem.quantity || 0);
-    }
-
-    const calculatedStock = Number(item.initialStock || 0) + totalDelivered - totalIssued + totalReturned;
-    await updateRow('inventory', req.params.id, { currentStock: calculatedStock });
-
-    res.json({ currentStock: calculatedStock });
+    res.json({ currentStock });
   } catch (err) {
     console.error('Recalculate stock error:', err);
     res.status(500).json({ error: 'Failed to recalculate stock' });
