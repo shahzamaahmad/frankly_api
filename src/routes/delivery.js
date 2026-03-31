@@ -33,6 +33,18 @@ function readItemId(item) {
   return item.itemName || item.inventoryId || item.itemId || item.id || null;
 }
 
+function readEntityId(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    return value.id || value._id || value.row_id || null;
+  }
+
+  return value;
+}
+
 function toBoolean(value) {
   if (typeof value === 'boolean') {
     return value;
@@ -54,15 +66,25 @@ function normalizeItems(items) {
   }
 
   return source
-    .map((item) => ({
-      inventoryId: readItemId(item),
-      quantity: Number(item?.quantity || 0),
-      siteId: item?.site || item?.siteId || null,
-      customItemName: (item?.customItemName || item?.itemNameText || item?.name || '').trim(),
-      customItemSku: (item?.customItemSku || item?.sku || '').trim(),
-      isIssuedToSite: toBoolean(item?.isIssuedToSite),
-      issuedAt: item?.issuedAt || null,
-    }))
+    .map((item) => {
+      const itemNameValue = item?.itemName;
+      const nestedItemName = typeof itemNameValue === 'object'
+        ? (itemNameValue.name || itemNameValue.itemName || '')
+        : '';
+      const nestedItemSku = typeof itemNameValue === 'object'
+        ? (itemNameValue.sku || '')
+        : '';
+
+      return {
+        inventoryId: readItemId(item),
+        quantity: Number(item?.quantity || 0),
+        siteId: readEntityId(item?.site) || readEntityId(item?.siteId) || null,
+        customItemName: (item?.customItemName || item?.itemNameText || item?.name || nestedItemName || '').trim(),
+        customItemSku: (item?.customItemSku || item?.sku || nestedItemSku || '').trim(),
+        isIssuedToSite: toBoolean(item?.isIssuedToSite),
+        issuedAt: item?.issuedAt || null,
+      };
+    })
     .filter((item) => (item.inventoryId || item.customItemName) && item.quantity > 0);
 }
 
