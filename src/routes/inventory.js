@@ -459,7 +459,7 @@ router.delete('/:id', checkPermission('deleteInventory'), async (req, res) => {
   }
 });
 
-router.post('/:id/recalculate', checkPermission('editInventory'), async (req, res) => {
+router.post('/:id/recalculate', checkPermission('viewInventory'), async (req, res) => {
   try {
     const item = await fetchById('inventory', req.params.id);
     if (!item) return res.status(404).json({ error: 'Item not found' });
@@ -472,7 +472,7 @@ router.post('/:id/recalculate', checkPermission('editInventory'), async (req, re
   }
 });
 
-router.post('/recalculate-all', checkPermission('editInventory'), async (req, res) => {
+router.post('/recalculate-all', checkPermission('viewInventory'), async (req, res) => {
   try {
     const result = await recalculateAllInventoryStock();
     res.json(result);
