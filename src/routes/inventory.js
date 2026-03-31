@@ -122,6 +122,74 @@ async function recalculateInventoryStock(itemId, initialStockOverride) {
   return currentStock;
 }
 
+async function recalculateAllInventoryStock() {
+  const [items, transactions, deliveryItemsResult] = await Promise.all([
+    fetchMany('inventory'),
+    fetchMany('transactions'),
+    getSupabaseAdmin()
+      .from('delivery_items')
+      .select('inventory_id, quantity'),
+  ]);
+
+  if (deliveryItemsResult.error) {
+    throw deliveryItemsResult.error;
+  }
+
+  const issuedByItem = new Map();
+  const returnedByItem = new Map();
+  const deliveredByItem = new Map();
+
+  for (const transaction of transactions) {
+    const itemId = String(transaction.inventoryId || '');
+    if (!itemId) {
+      continue;
+    }
+
+    const quantity = Number(transaction.quantity || 0);
+    if (transaction.type === 'ISSUE') {
+      issuedByItem.set(itemId, (issuedByItem.get(itemId) || 0) + quantity);
+    } else if (transaction.type === 'RETURN') {
+      returnedByItem.set(itemId, (returnedByItem.get(itemId) || 0) + quantity);
+    }
+  }
+
+  for (const deliveryItem of deliveryItemsResult.data || []) {
+    const itemId = String(deliveryItem.inventory_id || '');
+    if (!itemId) {
+      continue;
+    }
+
+    deliveredByItem.set(
+      itemId,
+      (deliveredByItem.get(itemId) || 0) + Number(deliveryItem.quantity || 0),
+    );
+  }
+
+  const updates = items.map(async (item) => {
+    const itemId = String(item.id || item._id || '');
+    const currentStock =
+      Number(item.initialStock || 0) +
+      (deliveredByItem.get(itemId) || 0) -
+      (issuedByItem.get(itemId) || 0) +
+      (returnedByItem.get(itemId) || 0);
+
+    await updateRow('inventory', itemId, { currentStock });
+    return { id: itemId, currentStock };
+  });
+
+  const results = [];
+  const chunkSize = 25;
+  for (let index = 0; index < updates.length; index += chunkSize) {
+    const chunk = updates.slice(index, index + chunkSize);
+    results.push(...await Promise.all(chunk));
+  }
+
+  return {
+    total: items.length,
+    updated: results.length,
+  };
+}
+
 async function uploadInventoryImage(req, body) {
   if (body.image && !body.imageUrl) {
     body.imageUrl = body.image;
@@ -401,6 +469,16 @@ router.post('/:id/recalculate', checkPermission('editInventory'), async (req, re
   } catch (err) {
     console.error('Recalculate stock error:', err);
     res.status(500).json({ error: 'Failed to recalculate stock' });
+  }
+});
+
+router.post('/recalculate-all', checkPermission('editInventory'), async (req, res) => {
+  try {
+    const result = await recalculateAllInventoryStock();
+    res.json(result);
+  } catch (err) {
+    console.error('Recalculate all stock error:', err);
+    res.status(500).json({ error: 'Failed to recalculate all stock' });
   }
 });
 
