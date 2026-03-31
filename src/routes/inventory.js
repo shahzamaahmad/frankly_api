@@ -102,18 +102,20 @@ async function calculateCurrentStock(itemId, initialStockOverride) {
 
   let totalIssued = 0;
   let totalReturned = 0;
+  let totalNew = 0;
   let totalDelivered = 0;
 
   for (const transaction of transactions) {
     if (transaction.type === 'ISSUE') totalIssued += Number(transaction.quantity || 0);
     else if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
+    else if (transaction.type === 'NEW') totalNew += Number(transaction.quantity || 0);
   }
 
   for (const deliveryItem of deliveryItems) {
     totalDelivered += Number(deliveryItem.quantity || 0);
   }
 
-  return Number(initialStockOverride || 0) + totalDelivered - totalIssued + totalReturned;
+  return Number(initialStockOverride || 0) + totalDelivered - totalIssued + totalReturned + totalNew;
 }
 
 async function recalculateInventoryStock(itemId, initialStockOverride) {
@@ -137,6 +139,7 @@ async function recalculateAllInventoryStock() {
 
   const issuedByItem = new Map();
   const returnedByItem = new Map();
+  const newByItem = new Map();
   const deliveredByItem = new Map();
 
   for (const transaction of transactions) {
@@ -150,6 +153,8 @@ async function recalculateAllInventoryStock() {
       issuedByItem.set(itemId, (issuedByItem.get(itemId) || 0) + quantity);
     } else if (transaction.type === 'RETURN') {
       returnedByItem.set(itemId, (returnedByItem.get(itemId) || 0) + quantity);
+    } else if (transaction.type === 'NEW') {
+      newByItem.set(itemId, (newByItem.get(itemId) || 0) + quantity);
     }
   }
 
@@ -171,7 +176,8 @@ async function recalculateAllInventoryStock() {
       Number(item.initialStock || 0) +
       (deliveredByItem.get(itemId) || 0) -
       (issuedByItem.get(itemId) || 0) +
-      (returnedByItem.get(itemId) || 0);
+      (returnedByItem.get(itemId) || 0) +
+      (newByItem.get(itemId) || 0);
 
     await updateRow('inventory', itemId, { currentStock });
     return { id: itemId, currentStock };

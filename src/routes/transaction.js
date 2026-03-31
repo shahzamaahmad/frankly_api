@@ -31,8 +31,8 @@ function getTransactionEmployeeId(transaction) {
 
 async function buildTransactionWritePayload(body) {
   const payload = {
-    type: body.type,
-    siteId: body.site,
+    type: String(body.type || '').toUpperCase(),
+    siteId: body.site || null,
     inventoryId: body.item,
     quantity: Number(body.quantity),
     returnCondition: body.returnDetails?.condition || null,
@@ -158,6 +158,7 @@ async function recalculateInventoryStock(itemId) {
   let totalDelivered = 0;
   let totalIssued = 0;
   let totalReturned = 0;
+  let totalNew = 0;
 
   for (const item of deliveryItems) {
     totalDelivered += Number(item.quantity || 0);
@@ -166,9 +167,15 @@ async function recalculateInventoryStock(itemId) {
   for (const transaction of transactions) {
     if (transaction.type === 'ISSUE') totalIssued += Number(transaction.quantity || 0);
     if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
+    if (transaction.type === 'NEW') totalNew += Number(transaction.quantity || 0);
   }
 
-  const currentStock = Number(inventory.initialStock || 0) + totalDelivered - totalIssued + totalReturned;
+  const currentStock =
+    Number(inventory.initialStock || 0) +
+    totalDelivered -
+    totalIssued +
+    totalReturned +
+    totalNew;
   await updateRow('inventory', itemId, { currentStock });
 }
 
@@ -211,9 +218,18 @@ router.get('/:id', checkPermission('viewTransactions'), async (req, res) => {
 router.post('/', checkPermission('addTransactions'), async (req, res) => {
   try {
     const { type, site, item, quantity, timestamp } = req.body;
+    const normalizedType = String(type || '').toUpperCase();
 
-    if (!type || !site || !item || !quantity || Number(quantity) <= 0) {
+    if (!normalizedType || !item || !quantity || Number(quantity) <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
+    }
+
+    if (!['ISSUE', 'RETURN', 'NEW'].includes(normalizedType)) {
+      return res.status(400).json({ error: 'Invalid transaction type' });
+    }
+
+    if (normalizedType !== 'NEW' && !site) {
+      return res.status(400).json({ error: 'Site is required' });
     }
 
     const { transactionId, timestamp: createdTimestamp } = await generateTransactionId(timestamp);
@@ -232,7 +248,7 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
 
     const populated = await populateTransaction(transaction);
 
-    createLog('ADD_TRANSACTION', req.user.id, req.user.username, `Added ${type} transaction: ${transactionId}`).catch((error) => {
+    createLog('ADD_TRANSACTION', req.user.id, req.user.username, `Added ${normalizedType} transaction: ${transactionId}`).catch((error) => {
       console.error('Log failed:', error);
     });
     res.status(201).json(populated);
@@ -249,9 +265,18 @@ router.put('/:id', checkPermission('editTransactions'), async (req, res) => {
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
     const { type, site, item, quantity } = req.body;
+    const normalizedType = String(type || '').toUpperCase();
 
-    if (!type || !site || !item || !quantity || Number(quantity) <= 0) {
+    if (!normalizedType || !item || !quantity || Number(quantity) <= 0) {
       return res.status(400).json({ error: 'Invalid input data' });
+    }
+
+    if (!['ISSUE', 'RETURN', 'NEW'].includes(normalizedType)) {
+      return res.status(400).json({ error: 'Invalid transaction type' });
+    }
+
+    if (normalizedType !== 'NEW' && !site) {
+      return res.status(400).json({ error: 'Site is required' });
     }
 
     const nextItem = await fetchById('inventory', item);

@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { fetchById, fetchMany, deleteRow, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
+const { fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
 const { getSupabaseAdmin } = require('../lib/supabase');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
@@ -44,6 +44,7 @@ function normalizeItems(items) {
     .map((item) => ({
       inventoryId: readItemId(item),
       quantity: Number(item?.quantity || 0),
+      siteId: item?.site || item?.siteId || null,
     }))
     .filter((item) => item.inventoryId && item.quantity > 0);
 }
@@ -121,11 +122,22 @@ async function syncDeliveryItems(deliveryId, items) {
     return;
   }
 
+  const supportsSiteId = await hasColumn('deliveryItems', 'siteId');
+  if (!supportsSiteId && items.some((item) => item.siteId)) {
+    throw new Error('delivery_items.site_id column is required to save site-specific delivery lines');
+  }
+
   const payload = items.map((item) => ({
     delivery_id: deliveryId,
     inventory_id: item.inventoryId,
     quantity: item.quantity,
   }));
+
+  if (supportsSiteId) {
+    for (const [index, entry] of payload.entries()) {
+      entry.site_id = items[index]?.siteId || null;
+    }
+  }
 
   const { error: insertError } = await client.from('delivery_items').insert(payload);
   if (insertError) {
@@ -194,13 +206,22 @@ async function populateDeliveries(deliveries) {
   }
 
   const inventoryIds = uniqueIds(deliveryItems.map((item) => item.inventory_id));
+  const siteIds = uniqueIds(deliveryItems.map((item) => item.site_id));
   const inventory = inventoryIds.length
     ? await fetchMany('inventory', { filters: [{ column: 'id', operator: 'in', value: inventoryIds }] })
+    : [];
+  const sites = siteIds.length
+    ? await fetchMany('sites', { filters: [{ column: 'id', operator: 'in', value: siteIds }] })
     : [];
   const inventoryMap = indexById(inventory.map((item) => ({
     id: item.id || item._id,
     name: item.name,
     sku: item.sku,
+  })));
+  const siteMap = indexById(sites.map((site) => ({
+    id: site.id || site._id,
+    siteName: site.siteName,
+    name: site.siteName || site.name,
   })));
 
   return deliveries.map((delivery) => {
@@ -210,6 +231,7 @@ async function populateDeliveries(deliveries) {
       items: currentItems.map((item) => ({
         itemName: inventoryMap.get(String(item.inventory_id)) || item.inventory_id,
         quantity: Number(item.quantity || 0),
+        site: item.site_id ? (siteMap.get(String(item.site_id)) || item.site_id) : null,
       })),
     };
   });

@@ -10,6 +10,7 @@ const tableCandidates = {
   sites: [process.env.SUPABASE_TABLE_SITES, 'sites', 'site'],
   transactions: [process.env.SUPABASE_TABLE_TRANSACTIONS, 'transactions', 'transaction'],
   deliveries: [process.env.SUPABASE_TABLE_DELIVERIES, 'deliveries', 'delivery'],
+  deliveryItems: [process.env.SUPABASE_TABLE_DELIVERY_ITEMS, 'delivery_items'],
   attendance: [process.env.SUPABASE_TABLE_ATTENDANCE, 'attendance', 'attendances'],
   notifications: [process.env.SUPABASE_TABLE_NOTIFICATIONS, 'notifications', 'notification'],
   logs: [process.env.SUPABASE_TABLE_LOGS, 'logs', 'log'],
