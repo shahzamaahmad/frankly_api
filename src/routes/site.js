@@ -26,7 +26,7 @@ async function populateSite(site) {
     return null;
   }
 
-  const userMap = await fetchUserSummaries([site.engineerId]);
+  const userMap = await fetchUserSummaries([site.engineerId, site.siteManager]);
 
   return {
     ...site,
@@ -38,13 +38,13 @@ async function populateSite(site) {
       ? { start: site.workingHoursStart, end: site.workingHoursEnd }
       : null,
     engineer: site.engineerId ? (userMap.get(String(site.engineerId)) || site.engineerId) : site.engineerId,
-    siteManager: null,
+    siteManager: site.siteManager ? (userMap.get(String(site.siteManager)) || site.siteManager) : site.siteManager,
     safetyOfficer: null,
   };
 }
 
 async function populateSites(sites) {
-  const ids = uniqueIds(sites.map((site) => site.engineerId));
+  const ids = uniqueIds(sites.flatMap((site) => [site.engineerId, site.siteManager]));
 
   const userMap = await fetchUserSummaries(ids);
 
@@ -58,7 +58,7 @@ async function populateSites(sites) {
       ? { start: site.workingHoursStart, end: site.workingHoursEnd }
       : null,
     engineer: site.engineerId ? (userMap.get(String(site.engineerId)) || site.engineerId) : site.engineerId,
-    siteManager: null,
+    siteManager: site.siteManager ? (userMap.get(String(site.siteManager)) || site.siteManager) : site.siteManager,
     safetyOfficer: null,
   }));
 }
@@ -95,10 +95,15 @@ function normalizeSitePayload(body) {
       : payload.engineer;
   }
 
+  if (payload.siteManager) {
+    payload.siteManager = typeof payload.siteManager === 'object'
+      ? (payload.siteManager.id || payload.siteManager._id)
+      : payload.siteManager;
+  }
+
   delete payload.client;
   delete payload.workingHours;
   delete payload.engineer;
-  delete payload.siteManager;
   delete payload.safetyOfficer;
   delete payload.createdAt;
   delete payload.updatedAt;
