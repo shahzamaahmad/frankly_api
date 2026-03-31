@@ -48,12 +48,36 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ?.split(',')
+  .map(o => o.trim())
+  .filter(Boolean) || [];
+
+const corsOrigin = (origin, callback) => {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+
+  if (allowedOrigins.length === 0) {
+    callback(null, origin);
+    return;
+  }
+
+  if (allowedOrigins.includes(origin)) {
+    callback(null, origin);
+    return;
+  }
+
+  callback(new Error(`CORS blocked for origin: ${origin}`));
+};
+
 app.use(cors({
-  origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
+  origin: corsOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 204
 }));
 
 app.use(express.json({ limit: '10mb' }));
