@@ -144,7 +144,6 @@ router.post('/checkin', async (req, res) => {
         `You have been checked out by ${req.user.fullName || req.user.username}`
       );
 
-      if (global.io) global.io.emit('attendance:checkout', await populateAttendance(checkedOut));
       return res.json(await populateAttendance(checkedOut));
     }
 
@@ -182,7 +181,6 @@ router.post('/checkin', async (req, res) => {
     }
 
     const populatedAttendance = await populateAttendance(attendance);
-    if (global.io) global.io.emit('attendance:checkin', populatedAttendance);
     res.status(201).json(populatedAttendance);
   } catch (error) {
     console.error('Check-in error:', error.message, error.stack);
@@ -224,7 +222,6 @@ router.put('/checkout/:id', async (req, res) => {
     });
 
     const populated = await populateAttendance(updated);
-    if (global.io) global.io.emit('attendance:checkout', populated);
     res.json(populated);
   } catch (error) {
     console.error('Check-out error:', error.message, error.stack);
@@ -466,8 +463,6 @@ router.put('/:id/approve', async (req, res) => {
     ).catch((error) => {
       console.error('Log failed:', error);
     });
-
-    if (global.io) global.io.emit('attendance:approved', populated);
     res.json(populated);
   } catch (error) {
     console.error('Approve attendance error:', error.message, error.stack);
@@ -499,8 +494,6 @@ router.put('/:id/reject', async (req, res) => {
     ).catch((error) => {
       console.error('Log failed:', error);
     });
-
-    if (global.io) global.io.emit('attendance:rejected', populated);
     res.json(populated);
   } catch (error) {
     console.error('Reject attendance error:', error.message, error.stack);

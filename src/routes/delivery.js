@@ -250,9 +250,6 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
 
     const populated = await populateDelivery(delivery);
     await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${delivery.deliveryId || delivery.id}`);
-    if (global.io) {
-      global.io.emit('delivery:created', populated);
-    }
     res.status(201).json(populated);
   } catch (err) {
     console.error('Create delivery error:', err);
@@ -327,9 +324,6 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
 
     const populated = await populateDelivery(updated);
     await createLog('EDIT_DELIVERY', req.user.id, req.user.username, `Edited delivery: ${req.params.id}`);
-    if (global.io) {
-      global.io.emit('delivery:updated', populated);
-    }
     res.json(populated);
   } catch (err) {
     console.error('Update delivery error:', err);
@@ -351,9 +345,6 @@ router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
     await recalculateInventoryStocks(affectedItems);
 
     await createLog('DELETE_DELIVERY', req.user.id, req.user.username, `Deleted delivery: ${req.params.id}`);
-    if (global.io) {
-      global.io.emit('delivery:deleted', { id: req.params.id });
-    }
     res.json({ message: 'Deleted' });
   } catch (err) {
     console.error('Delete delivery error:', err);

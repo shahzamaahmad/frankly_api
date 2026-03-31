@@ -45,10 +45,6 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
     if (nextFullName) {
       updates.fullName = nextFullName;
     }
-
-    const permissionsChanged = updates.permissions &&
-      JSON.stringify(currentUser.permissions || {}) !== JSON.stringify(updates.permissions);
-
     if (updates.password) {
       await updateSupabaseUser(currentUser, {
         password: updates.password,
@@ -72,14 +68,6 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
     delete updates.createdAt;
 
     const updatedUser = sanitizeUser(await updateRow('users', req.params.id, updates));
-
-    if (permissionsChanged && global.io) {
-      global.io.to(`user:${req.params.id}`).emit('permissionsUpdated', { permissions: updatedUser.permissions });
-    }
-
-    if (global.io) {
-      global.io.emit('user:updated', { id: req.params.id });
-    }
 
     res.json(updatedUser);
   } catch (err) {

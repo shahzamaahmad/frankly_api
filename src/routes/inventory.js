@@ -162,10 +162,6 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
       console.error('Log failed:', error);
     });
 
-    if (global.io) {
-      global.io.emit('inventory:created', inventory);
-    }
-
     res.status(201).json(inventory);
   } catch (err) {
     console.error('Create inventory error:', err);
@@ -260,10 +256,6 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
       console.error('Log failed:', error);
     });
 
-    if (global.io) {
-      global.io.emit('inventory:updated', updated);
-    }
-
     res.json(updated);
   } catch (err) {
     console.error('Update inventory error:', err);
@@ -302,10 +294,6 @@ router.delete('/:id', checkPermission('deleteInventory'), async (req, res) => {
     createLog('DELETE_INVENTORY', req.user.id, req.user.username, `Deleted item: ${item.name}`).catch((error) => {
       console.error('Log failed:', error);
     });
-
-    if (global.io) {
-      global.io.emit('inventory:deleted', { id: req.params.id });
-    }
 
     res.json({ message: 'Deleted' });
   } catch (err) {

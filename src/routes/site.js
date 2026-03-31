@@ -114,7 +114,6 @@ router.post('/', checkPermission('addSites'), async (req, res) => {
 
     const site = await insertRow('sites', normalizeSitePayload(req.body));
     const populated = await populateSite(site);
-    if (global.io) global.io.emit('site:created', populated);
     res.status(201).json(populated);
   } catch (err) {
     console.error('Create site error:', err);
@@ -153,7 +152,6 @@ router.put('/:id', checkPermission('editSites'), async (req, res) => {
     if (!updated) return res.status(404).json({ error: 'Site not found' });
 
     const populated = await populateSite(updated);
-    if (global.io) global.io.emit('site:updated', populated);
     res.json(populated);
   } catch (err) {
     console.error('Update site error:', err);
@@ -169,8 +167,6 @@ router.delete('/:id', checkPermission('deleteSites'), async (req, res) => {
     }
 
     await deleteRow('sites', req.params.id);
-
-    if (global.io) global.io.emit('site:deleted', { id: req.params.id });
     res.json({ message: 'Deleted' });
   } catch (err) {
     console.error('Delete site error:', err);

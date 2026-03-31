@@ -17,9 +17,6 @@ const cors = loadRoute('cors');
 const swaggerUi = loadRoute('swagger-ui-express');
 const swaggerSpec = loadRoute('./swagger');
 const { getSupabaseAdmin, getSupabaseAuth } = loadRoute('./lib/supabase');
-const { verifyAccessToken } = loadRoute('./lib/auth');
-
-
 
 let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes;
 let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
@@ -114,38 +111,7 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 4000;
 getSupabaseAdmin();
 getSupabaseAuth();
-
-const http = require('http');
-const socketIo = require('socket.io');
-const server = http.createServer(app);
-const io = socketIo(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
-});
-
-io.use(async (socket, next) => {
-  const token = socket.handshake.auth.token;
-  if (!token) {
-    return next(new Error('Authentication error'));
-  }
-  try {
-    const { user } = await verifyAccessToken(token);
-    socket.userId = user.id;
-    next();
-  } catch (err) {
-    next(new Error('Authentication error'));
-  }
-});
-
-io.on('connection', (socket) => {
-  socket.join(`user:${socket.userId}`);
-
-  socket.on('disconnect', () => {
-  });
-});
-
-global.io = io;
-
-server.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
 
