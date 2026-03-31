@@ -13,8 +13,6 @@ const tableCandidates = {
   deliveryItems: [process.env.SUPABASE_TABLE_DELIVERY_ITEMS, 'delivery_items'],
   attendance: [process.env.SUPABASE_TABLE_ATTENDANCE, 'attendance', 'attendances'],
   notifications: [process.env.SUPABASE_TABLE_NOTIFICATIONS, 'notifications', 'notification'],
-  logs: [process.env.SUPABASE_TABLE_LOGS, 'logs', 'log'],
-  activities: [process.env.SUPABASE_TABLE_ACTIVITIES, 'activities', 'activity'],
   appConfig: [process.env.SUPABASE_TABLE_APP_CONFIG, 'app_config', 'app_configs', 'appConfig'],
 };
 

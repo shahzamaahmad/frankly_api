@@ -1,7 +1,3 @@
-const bcrypt = require('bcrypt');
-
-const SALT_ROUNDS = 10;
-
 const DEFAULT_PERMISSIONS = {
   viewInventory: false,
   addInventory: false,
@@ -83,23 +79,10 @@ function sanitizeUser(user) {
   };
 }
 
-async function hashPassword(password) {
-  return bcrypt.hash(password, SALT_ROUNDS);
-}
-
-async function comparePassword(candidate, hash) {
-  if (!candidate || !hash) {
-    return false;
-  }
-  return bcrypt.compare(candidate, hash);
-}
-
 module.exports = {
   DEFAULT_PERMISSIONS,
   buildFullName,
-  comparePassword,
   generateUsername,
-  hashPassword,
   mergePermissions,
   sanitizeUser,
 };

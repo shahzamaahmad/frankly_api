@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const { fetchById, fetchMany, deleteRow, insertRow, updateRow } = require('../lib/db');
 const { getSupabaseAdmin } = require('../lib/supabase');
-const { createLog } = require('../utils/logger');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
 
@@ -20,18 +19,6 @@ const upload = multer({
     }
   }
 });
-
-async function createInventoryActivity(action, reqUser, item, details) {
-  await insertRow('activities', {
-    action,
-    itemType: 'inventory',
-    itemId: item.id || item._id || null,
-    itemName: item.name || null,
-    details,
-    userName: reqUser?.username || null,
-    createdAt: new Date().toISOString(),
-  }, { timestamps: false });
-}
 
 function parseNumber(value) {
   if (value === undefined || value === null || value === '') {
@@ -284,18 +271,6 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
 
     const inventory = await insertRow('inventory', data);
 
-    createInventoryActivity(
-      'ADD_INVENTORY',
-      req.user,
-      inventory,
-      `Added item: ${inventory.name}`,
-    ).catch((error) => {
-      console.error('Activity log failed:', error);
-    });
-    createLog('ADD_INVENTORY', req.user.id, req.user.username, `Added item: ${inventory.name}`).catch((error) => {
-      console.error('Log failed:', error);
-    });
-
     res.status(201).json(inventory);
   } catch (err) {
     console.error('Create inventory error:', err);
@@ -395,18 +370,6 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
     );
     updated.currentStock = currentStock;
 
-    createInventoryActivity(
-      'EDIT_INVENTORY',
-      req.user,
-      updated,
-      `Updated item: ${updated.name}`,
-    ).catch((error) => {
-      console.error('Activity log failed:', error);
-    });
-    createLog('EDIT_INVENTORY', req.user.id, req.user.username, `Updated item: ${updated.name}`).catch((error) => {
-      console.error('Log failed:', error);
-    });
-
     res.json(updated);
   } catch (err) {
     console.error('Update inventory error:', err);
@@ -445,18 +408,6 @@ router.delete('/:id', checkPermission('deleteInventory'), async (req, res) => {
     }
 
     await deleteRow('inventory', req.params.id);
-
-    createInventoryActivity(
-      'DELETE_INVENTORY',
-      req.user,
-      item,
-      `Deleted item: ${item.name}`,
-    ).catch((error) => {
-      console.error('Activity log failed:', error);
-    });
-    createLog('DELETE_INVENTORY', req.user.id, req.user.username, `Deleted item: ${item.name}`).catch((error) => {
-      console.error('Log failed:', error);
-    });
 
     res.json({ message: 'Deleted' });
   } catch (err) {

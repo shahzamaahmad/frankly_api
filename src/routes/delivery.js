@@ -4,7 +4,6 @@ const { fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, unique
 const { getSupabaseAdmin } = require('../lib/supabase');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
-const { createLog } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -330,7 +329,6 @@ router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
     await recalculateInventoryStocks(items.map((item) => item.inventoryId));
 
     const populated = await populateDelivery(delivery);
-    await createLog('ADD_DELIVERY', req.user.id, req.user.username, `Added delivery: ${delivery.deliveryId || delivery.id}`);
     res.status(201).json(populated);
   } catch (err) {
     console.error('Create delivery error:', err);
@@ -404,7 +402,6 @@ router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
     await recalculateInventoryStocks(affectedItems);
 
     const populated = await populateDelivery(updated);
-    await createLog('EDIT_DELIVERY', req.user.id, req.user.username, `Edited delivery: ${req.params.id}`);
     res.json(populated);
   } catch (err) {
     console.error('Update delivery error:', err);
@@ -424,8 +421,6 @@ router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
     await syncDeliveryItems(req.params.id, []);
     await deleteRow('deliveries', req.params.id);
     await recalculateInventoryStocks(affectedItems);
-
-    await createLog('DELETE_DELIVERY', req.user.id, req.user.username, `Deleted delivery: ${req.params.id}`);
     res.json({ message: 'Deleted' });
   } catch (err) {
     console.error('Delete delivery error:', err);

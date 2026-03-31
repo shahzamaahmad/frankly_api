@@ -2,7 +2,6 @@ const express = require('express');
 const { ID_COLUMN, fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
 const { getSupabaseAdmin } = require('../lib/supabase');
 const checkPermission = require('../middlewares/checkPermission');
-const { createLog } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -257,9 +256,6 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
 
     const populated = await populateTransaction(transaction);
 
-    createLog('ADD_TRANSACTION', req.user.id, req.user.username, `Added ${normalizedType} transaction: ${transactionId}`).catch((error) => {
-      console.error('Log failed:', error);
-    });
     res.status(201).json(populated);
   } catch (err) {
     console.error('Create transaction error:', err);
@@ -299,9 +295,6 @@ router.put('/:id', checkPermission('editTransactions'), async (req, res) => {
 
     const populated = await populateTransaction(updated);
 
-    createLog('EDIT_TRANSACTION', req.user.id, req.user.username, `Edited transaction: ${transaction.transactionId}`).catch((error) => {
-      console.error('Log failed:', error);
-    });
     res.json(populated);
   } catch (err) {
     console.error('Update transaction error:', err);
@@ -318,9 +311,6 @@ router.delete('/:id', checkPermission('deleteTransactions'), async (req, res) =>
     await deleteRow('transactions', req.params.id);
     await recalculateInventoryStocks([transaction.inventoryId]);
 
-    createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`).catch((error) => {
-      console.error('Log failed:', error);
-    });
     res.json({ message: 'Transaction deleted' });
   } catch (err) {
     console.error('Delete transaction error:', err);

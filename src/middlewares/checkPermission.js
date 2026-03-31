@@ -4,7 +4,7 @@ const checkPermission = (permission) => {
       return res.status(401).json({ message: 'Unauthorized', requiresPermission: true });
     }
 
-    if (req.user.role === 'admin') {
+    if (String(req.user.role || '').toLowerCase() === 'admin') {
       return next();
     }
 
@@ -22,14 +22,6 @@ const checkPermission = (permission) => {
       normalized.startsWith('approve') ||
       normalized.startsWith('refresh')
     ) {
-      return res.status(403).json({ 
-        message: 'You do not have permission to access this feature. Please contact your administrator.', 
-        requiresPermission: true,
-        permission: permission 
-      });
-    }
-
-    if (!req.user.permissions || !req.user.permissions[permission]) {
       return res.status(403).json({ 
         message: 'You do not have permission to access this feature. Please contact your administrator.', 
         requiresPermission: true,

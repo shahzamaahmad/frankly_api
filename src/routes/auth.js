@@ -13,7 +13,6 @@ const {
 const {
   generateUsername,
 } = require('../lib/users');
-const { createLog } = require('../utils/logger');
 
 /**
  * @swagger
@@ -136,8 +135,6 @@ router.post('/login', async (req, res) => {
       lastLoginAt: new Date().toISOString(),
     });
 
-    await createLog('LOGIN', updatedUser._id, updatedUser.username, 'User logged in');
-
     res.json(formatSessionPayload(result.session, updatedUser));
   } catch (err) {
     console.error('Login error:', err);
@@ -194,8 +191,6 @@ router.put('/change-password', async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     await changePassword(token, currentPassword, newPassword);
-    await createLog('CHANGE_PASSWORD', user._id || user.id, user.username, 'Password changed');
-
     res.json({ message: 'Password changed successfully' });
   } catch (err) {
     console.error('Change password error:', err);

@@ -19,9 +19,8 @@ const swaggerSpec = loadRoute('./swagger');
 const { getSupabaseAdmin, getSupabaseAuth } = loadRoute('./lib/supabase');
 
 let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes;
-let uploadsRoutes, usersRoutes, transactionRoutes, attendanceRoutes;
-let logRoutes, onesignalRoutes, contactsRoutes, appConfigRoutes, notificationsRoutes;
-let activitiesRoutes;
+let uploadsRoutes, usersRoutes, transactionRoutes;
+let appConfigRoutes;
 
 const initRoutes = () => {
   authRoutes = loadRoute('./routes/auth');
@@ -31,13 +30,7 @@ const initRoutes = () => {
   uploadsRoutes = loadRoute('./routes/uploads');
   usersRoutes = loadRoute('./routes/users');
   transactionRoutes = loadRoute('./routes/transaction');
-  attendanceRoutes = loadRoute('./routes/attendance');
-  logRoutes = loadRoute('./routes/log');
-  onesignalRoutes = loadRoute('./routes/onesignal');
-  contactsRoutes = loadRoute('./routes/contacts');
   appConfigRoutes = loadRoute('./routes/appConfig');
-  notificationsRoutes = loadRoute('./routes/notifications');
-  activitiesRoutes = loadRoute('./routes/activities');
 };
 
 initRoutes();
@@ -92,9 +85,9 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/auth', authRoutes);
 
@@ -106,13 +99,7 @@ try {
   app.use('/api/uploads', authMiddleware, uploadsRoutes);
   app.use('/api/users', authMiddleware, usersRoutes);
   app.use('/api/transactions', authMiddleware, transactionRoutes);
-  app.use('/api/attendance', authMiddleware, attendanceRoutes);
-  app.use('/api/logs', authMiddleware, logRoutes);
-  app.use('/api/onesignal', authMiddleware, onesignalRoutes);
-  app.use('/api/contacts', authMiddleware, contactsRoutes);
   app.use('/api/app-config', appConfigRoutes);
-  app.use('/api/notifications', authMiddleware, notificationsRoutes);
-  app.use('/api/activities', authMiddleware, activitiesRoutes);
 } catch (err) {
   console.error('Route setup error:', err);
   process.exit(1);
