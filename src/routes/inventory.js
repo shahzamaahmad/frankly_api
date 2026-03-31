@@ -307,7 +307,7 @@ router.post('/:id/recalculate', checkPermission('editInventory'), async (req, re
     const item = await fetchById('inventory', req.params.id);
     if (!item) return res.status(404).json({ error: 'Item not found' });
 
-    const [transactions, deliveryItems, users] = await Promise.all([
+    const [transactions, deliveryItems] = await Promise.all([
       fetchMany('transactions', { filters: [{ column: 'inventoryId', operator: 'eq', value: req.params.id }] }),
       (async () => {
         const { data, error } = await getSupabaseAdmin()
@@ -321,13 +321,11 @@ router.post('/:id/recalculate', checkPermission('editInventory'), async (req, re
 
         return data || [];
       })(),
-      fetchMany('users'),
     ]);
 
     let totalIssued = 0;
     let totalReturned = 0;
     let totalDelivered = 0;
-    let totalAssigned = 0;
 
     for (const transaction of transactions) {
       if (transaction.type === 'ISSUE') totalIssued += Number(transaction.quantity || 0);
@@ -338,15 +336,7 @@ router.post('/:id/recalculate', checkPermission('editInventory'), async (req, re
       totalDelivered += Number(deliveryItem.quantity || 0);
     }
 
-    for (const user of users) {
-      for (const asset of user.assets || []) {
-        if (String(asset.item) === req.params.id) {
-          totalAssigned += Number(asset.quantity || 0);
-        }
-      }
-    }
-
-    const calculatedStock = Number(item.initialStock || 0) + totalDelivered - totalIssued + totalReturned - totalAssigned;
+    const calculatedStock = Number(item.initialStock || 0) + totalDelivered - totalIssued + totalReturned;
     await updateRow('inventory', req.params.id, { currentStock: calculatedStock });
 
     res.json({ currentStock: calculatedStock });

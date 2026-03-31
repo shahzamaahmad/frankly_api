@@ -79,7 +79,6 @@ function sanitizeUser(user) {
     isActive: sanitized.isActive !== false,
     role: sanitized.role || 'emp',
     permissions: mergePermissions(sanitized.permissions),
-    assets: Array.isArray(sanitized.assets) ? sanitized.assets : [],
     salaryCurrency: sanitized.salaryCurrency || 'AED',
   };
 }

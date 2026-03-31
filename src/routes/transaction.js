@@ -147,7 +147,9 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
 
     const populated = await populateTransaction(transaction);
 
-    await createLog('ADD_TRANSACTION', req.user.id, req.user.username, `Added ${type} transaction: ${transactionId}`);
+    createLog('ADD_TRANSACTION', req.user.id, req.user.username, `Added ${type} transaction: ${transactionId}`).catch((error) => {
+      console.error('Log failed:', error);
+    });
     res.status(201).json(populated);
   } catch (err) {
     console.error('Create transaction error:', err);
@@ -180,7 +182,9 @@ router.put('/:id', checkPermission('editTransactions'), async (req, res) => {
 
     const populated = await populateTransaction(updated);
 
-    await createLog('EDIT_TRANSACTION', req.user.id, req.user.username, `Edited transaction: ${transaction.transactionId}`);
+    createLog('EDIT_TRANSACTION', req.user.id, req.user.username, `Edited transaction: ${transaction.transactionId}`).catch((error) => {
+      console.error('Log failed:', error);
+    });
     res.json(populated);
   } catch (err) {
     console.error('Update transaction error:', err);
@@ -197,7 +201,9 @@ router.delete('/:id', checkPermission('deleteTransactions'), async (req, res) =>
     await applyTransactionStock(transaction.inventoryId, transaction.quantity, transaction.type, true);
     await deleteRow('transactions', req.params.id);
 
-    await createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`);
+    createLog('DELETE_TRANSACTION', req.user.id, req.user.username, `Deleted transaction: ${transaction.transactionId}`).catch((error) => {
+      console.error('Log failed:', error);
+    });
     res.json({ message: 'Transaction deleted' });
   } catch (err) {
     console.error('Delete transaction error:', err);

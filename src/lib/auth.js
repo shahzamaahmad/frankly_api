@@ -171,7 +171,6 @@ async function createProfileFromAuthUser(authUser) {
     mobile: authUser.phone || null,
     isActive: true,
     permissions: mergePermissions(authUser.user_metadata?.permissions),
-    assets: [],
     salaryCurrency: 'AED',
   };
 
@@ -241,7 +240,6 @@ async function createLinkedUserProfile(profile, authUser) {
     role: profile.role || 'emp',
     isActive: profile.isActive !== false,
     permissions: mergePermissions(profile.permissions),
-    assets: Array.isArray(profile.assets) ? profile.assets : [],
     salaryCurrency: profile.salaryCurrency || 'AED',
   };
 
