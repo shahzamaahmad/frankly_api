@@ -84,6 +84,7 @@ function normalizeItems(items) {
         customItemCategory: (item?.customItemCategory || item?.category || (typeof itemNameValue === 'object' ? itemNameValue.category : '') || '').trim(),
         isIssuedToSite: toBoolean(item?.isIssuedToSite),
         issuedAt: item?.issuedAt || null,
+        issuedBy: (item?.issuedBy || '').trim(),
       };
     })
     .filter((item) => (item.inventoryId || item.customItemName) && item.quantity > 0);
@@ -171,6 +172,7 @@ async function syncDeliveryItems(deliveryId, items) {
   const supportsCustomItemCategory = await hasColumn('deliveryItems', 'itemCategory');
   const supportsIssuedStatus = await hasColumn('deliveryItems', 'isIssuedToSite');
   const supportsIssuedAt = await hasColumn('deliveryItems', 'issuedAt');
+  const supportsIssuedBy = await hasColumn('deliveryItems', 'issuedBy');
   const hasCustomItems = items.some((item) => !item.inventoryId && item.customItemName);
   if (!supportsCustomItemName && hasCustomItems) {
     throw new Error('delivery_items.item_name column is required to save custom delivery lines');
@@ -183,6 +185,9 @@ async function syncDeliveryItems(deliveryId, items) {
   }
   if (!supportsIssuedAt && items.some((item) => item.issuedAt)) {
     throw new Error('delivery_items.issued_at column is required to save issued delivery timestamps');
+  }
+  if (!supportsIssuedBy && items.some((item) => item.issuedBy)) {
+    throw new Error('delivery_items.issued_by column is required to save issued-by details');
   }
 
   const payload = items.map((item) => ({
@@ -219,6 +224,11 @@ async function syncDeliveryItems(deliveryId, items) {
   if (supportsIssuedAt) {
     for (const [index, entry] of payload.entries()) {
       entry.issued_at = items[index]?.issuedAt || null;
+    }
+  }
+  if (supportsIssuedBy) {
+    for (const [index, entry] of payload.entries()) {
+      entry.issued_by = items[index]?.issuedBy || null;
     }
   }
 
@@ -324,6 +334,7 @@ async function populateDeliveries(deliveries) {
         customItemCategory: item.item_category || null,
         isIssuedToSite: item.is_issued_to_site === true,
         issuedAt: item.issued_at || null,
+        issuedBy: item.issued_by || null,
       })),
     };
   });
