@@ -14,6 +14,11 @@ const {
   generateUsername,
 } = require('../lib/users');
 
+function isExpiredTokenError(err) {
+  const message = err?.message?.toLowerCase?.() || '';
+  return err?.code === 'bad_jwt' || message.includes('expired');
+}
+
 /**
  * @swagger
  * tags:
@@ -152,6 +157,14 @@ router.get('/profile', async (req, res) => {
 
     res.json(user);
   } catch (err) {
+    if (isExpiredTokenError(err)) {
+      console.warn('Profile request: expired access token');
+      return res.status(401).json({
+        message: 'Session expired. Please login again',
+        code: 'session_expired',
+      });
+    }
+
     console.error('Profile error:', err);
     res.status(401).json({ message: 'Unauthorized' });
   }
