@@ -1,5 +1,10 @@
 const { verifyAccessToken } = require('../lib/auth');
 
+function isExpiredTokenError(err) {
+  const message = err?.message?.toLowerCase?.() || '';
+  return err?.code === 'bad_jwt' || message.includes('expired');
+}
+
 const authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ message: 'Please login and try again' });
@@ -19,6 +24,14 @@ const authMiddleware = async (req, res, next) => {
     };
     next();
   } catch (err) {
+    if (isExpiredTokenError(err)) {
+      console.warn('Auth middleware: expired access token');
+      return res.status(401).json({
+        message: 'Session expired. Please login again',
+        code: 'session_expired',
+      });
+    }
+
     console.error('Auth middleware error:', err);
     return res.status(401).json({ message: 'Please login and try again' });
   }
