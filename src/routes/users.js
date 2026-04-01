@@ -1,10 +1,63 @@
 const express = require('express');
-const { fetchById, fetchMany, deleteRow, updateRow } = require('../lib/db');
+const { countRows, deleteRow, fetchById, fetchMany, hasColumn, insertRow, updateRow } = require('../lib/db');
 const { deleteSupabaseUser, updateSupabaseUser } = require('../lib/auth');
 const { buildFullName, sanitizeUser } = require('../lib/users');
 const checkPermission = require('../middlewares/checkPermission');
 
 const router = express.Router();
+
+async function getUserDeleteDependencies(userId) {
+  const [
+    transactionsUseEmployeeId,
+    transactionsUseEmployee,
+    sitesUseEngineerId,
+    sitesUseSiteManager,
+  ] = await Promise.all([
+    hasColumn('transactions', 'employeeId'),
+    hasColumn('transactions', 'employee'),
+    hasColumn('sites', 'engineerId'),
+    hasColumn('sites', 'siteManager'),
+  ]);
+
+  const dependencyChecks = [];
+
+  if (transactionsUseEmployeeId) {
+    dependencyChecks.push(
+      countRows('transactions', [{ column: 'employeeId', operator: 'eq', value: userId }]),
+    );
+  } else if (transactionsUseEmployee) {
+    dependencyChecks.push(
+      countRows('transactions', [{ column: 'employee', operator: 'eq', value: userId }]),
+    );
+  } else {
+    dependencyChecks.push(Promise.resolve(0));
+  }
+
+  if (sitesUseEngineerId) {
+    dependencyChecks.push(
+      countRows('sites', [{ column: 'engineerId', operator: 'eq', value: userId }]),
+    );
+  } else {
+    dependencyChecks.push(Promise.resolve(0));
+  }
+
+  if (sitesUseSiteManager) {
+    dependencyChecks.push(
+      countRows('sites', [{ column: 'siteManager', operator: 'eq', value: userId }]),
+    );
+  } else {
+    dependencyChecks.push(Promise.resolve(0));
+  }
+
+  const [transactionCount, engineerSiteCount, siteManagerCount] = await Promise.all(dependencyChecks);
+
+  return {
+    transactionCount,
+    engineerSiteCount,
+    siteManagerCount,
+    totalSiteCount: engineerSiteCount + siteManagerCount,
+  };
+}
 
 router.get('/', checkPermission('viewEmployees'), async (req, res) => {
   try {
@@ -76,7 +129,7 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
   }
 });
 
-  router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
+router.delete('/:id', checkPermission('deleteEmployees'), async (req, res) => {
   try {
     if (req.params.id === req.user.id) {
       return res.status(400).json({ message: 'Cannot delete your own account' });
@@ -85,13 +138,43 @@ router.put('/:id', checkPermission('editEmployees'), async (req, res) => {
     const existingUser = await fetchById('users', req.params.id);
     if (!existingUser) return res.status(404).json({ message: 'User not found' });
 
-    await deleteSupabaseUser(existingUser);
-    const user = await deleteRow('users', req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const dependencies = await getUserDeleteDependencies(req.params.id);
+    if (dependencies.transactionCount || dependencies.totalSiteCount) {
+      const parts = [];
+      if (dependencies.transactionCount) {
+        parts.push(`${dependencies.transactionCount} transaction(s)`);
+      }
+      if (dependencies.engineerSiteCount) {
+        parts.push(`${dependencies.engineerSiteCount} site(s) as engineer`);
+      }
+      if (dependencies.siteManagerCount) {
+        parts.push(`${dependencies.siteManagerCount} site(s) as site manager`);
+      }
+
+      return res.status(409).json({
+        message: `Cannot delete this user because they are still linked to ${parts.join(', ')}. Reassign or remove those records first.`,
+        dependencies,
+      });
+    }
+
+    const deletedUser = await deleteRow('users', req.params.id);
+    if (!deletedUser) return res.status(404).json({ message: 'User not found' });
+
+    try {
+      await deleteSupabaseUser(existingUser);
+    } catch (authDeleteError) {
+      try {
+        await insertRow('users', existingUser, { timestamps: false });
+      } catch (restoreError) {
+        console.error('Restore user after auth delete failure error:', restoreError);
+      }
+      throw authDeleteError;
+    }
+
     res.json({ message: 'User deleted successfully' });
   } catch (err) {
     console.error('Delete user error:', err);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Failed to delete user' });
   }
 });
 
