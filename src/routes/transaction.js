@@ -235,11 +235,6 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
       return res.status(400).json({ error: 'Invalid transaction type' });
     }
 
-    const existingType = String(transaction.type || '').toUpperCase();
-    if (existingType && normalizedType !== existingType) {
-      return res.status(400).json({ error: 'Transaction type cannot be changed' });
-    }
-
     if (normalizedType !== 'NEW' && !site) {
       return res.status(400).json({ error: 'Site is required' });
     }
