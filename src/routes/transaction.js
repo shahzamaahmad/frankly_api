@@ -2,6 +2,7 @@ const express = require('express');
 const { ID_COLUMN, fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
 const { getSupabaseAdmin } = require('../lib/supabase');
 const checkPermission = require('../middlewares/checkPermission');
+const { recalculateInventoryStocks } = require('../lib/stock');
 
 const router = express.Router();
 
@@ -54,6 +55,59 @@ async function buildTransactionWritePayload(body) {
 
   if (await hasColumn('transactions', 'employeeName')) {
     const employee = await fetchById('users', employeeId);
+    payload.employeeName = employee?.fullName || employee?.username || null;
+  }
+
+  return payload;
+}
+
+async function buildTransactionPayloadConfig() {
+  const [
+    supportsNotes,
+    supportsEmployeeId,
+    supportsEmployee,
+    supportsEmployeeName,
+  ] = await Promise.all([
+    hasColumn('transactions', 'notes'),
+    hasColumn('transactions', 'employeeId'),
+    hasColumn('transactions', 'employee'),
+    hasColumn('transactions', 'employeeName'),
+  ]);
+
+  return {
+    supportsNotes,
+    supportsEmployeeId,
+    supportsEmployee,
+    supportsEmployeeName,
+  };
+}
+
+function buildTransactionWritePayloadFromConfig(body, config, employeeMap = new Map()) {
+  const payload = {
+    type: String(body.type || '').toUpperCase(),
+    siteId: body.site || null,
+    inventoryId: body.item,
+    quantity: Number(body.quantity),
+    returnCondition: body.returnDetails?.condition || null,
+  };
+
+  if (config.supportsNotes) {
+    payload.notes = body.returnDetails?.notes || null;
+  }
+
+  const employeeId = body.employee || null;
+  if (!employeeId) {
+    return payload;
+  }
+
+  if (config.supportsEmployeeId) {
+    payload.employeeId = employeeId;
+  } else if (config.supportsEmployee) {
+    payload.employee = employeeId;
+  }
+
+  if (config.supportsEmployeeName) {
+    const employee = employeeMap.get(String(employeeId));
     payload.employeeName = employee?.fullName || employee?.username || null;
   }
 
@@ -139,60 +193,6 @@ async function generateTransactionId(timestamp) {
   };
 }
 
-async function recalculateInventoryStock(itemId) {
-  const inventory = await fetchById('inventory', itemId);
-  if (!inventory) {
-    return;
-  }
-
-  const [transactions, deliveryItems] = await Promise.all([
-    fetchMany('transactions', {
-      filters: [{ column: 'inventoryId', operator: 'eq', value: itemId }],
-    }),
-    (async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from('delivery_items')
-        .select('quantity')
-        .eq('inventory_id', itemId);
-
-      if (error) {
-        throw error;
-      }
-
-      return data || [];
-    })(),
-  ]);
-
-  let totalDelivered = 0;
-  let totalIssued = 0;
-  let totalReturned = 0;
-  let totalNew = 0;
-
-  for (const item of deliveryItems) {
-    totalDelivered += Number(item.quantity || 0);
-  }
-
-  for (const transaction of transactions) {
-    if (transaction.type === 'ISSUE') totalIssued += Number(transaction.quantity || 0);
-    if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
-    if (transaction.type === 'NEW') totalNew += Number(transaction.quantity || 0);
-  }
-
-  const currentStock =
-    Number(inventory.initialStock || 0) +
-    totalDelivered -
-    totalIssued +
-    totalReturned +
-    totalNew;
-  await updateRow('inventory', itemId, { currentStock });
-}
-
-async function recalculateInventoryStocks(itemIds) {
-  for (const itemId of uniqueIds(itemIds)) {
-    await recalculateInventoryStock(itemId);
-  }
-}
-
 router.get('/', checkPermission('viewTransactions'), async (req, res) => {
   try {
     const filters = [];
@@ -259,6 +259,75 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
     res.status(201).json(populated);
   } catch (err) {
     console.error('Create transaction error:', err);
+    const status = err.message === 'Item not found' ? 404 : 500;
+    res.status(status).json({ error: status === 404 ? 'Item not found' : 'Internal server error' });
+  }
+});
+
+router.post('/bulk', checkPermission('addTransactions'), async (req, res) => {
+  try {
+    const source = Array.isArray(req.body?.transactions) ? req.body.transactions : [];
+    if (!source.length) {
+      return res.status(400).json({ error: 'At least one transaction is required' });
+    }
+
+    const normalized = source.map((body) => {
+      const type = String(body?.type || '').toUpperCase();
+      const item = body?.item;
+      const quantity = Number(body?.quantity);
+      return { body, type, item, quantity };
+    });
+
+    for (const entry of normalized) {
+      if (!entry.type || !entry.item || !entry.quantity || entry.quantity <= 0) {
+        return res.status(400).json({ error: 'Invalid input data' });
+      }
+      if (!['ISSUE', 'RETURN', 'NEW'].includes(entry.type)) {
+        return res.status(400).json({ error: 'Invalid transaction type' });
+      }
+      if (entry.type !== 'NEW' && !entry.body.site) {
+        return res.status(400).json({ error: 'Site is required' });
+      }
+    }
+
+    const itemIds = uniqueIds(normalized.map((entry) => entry.item));
+    const existingItems = await fetchMany('inventory', {
+      filters: [{ column: 'id', operator: 'in', value: itemIds }],
+    });
+    const existingItemIds = new Set(existingItems.map((item) => String(item.id || item._id)));
+    if (itemIds.some((itemId) => !existingItemIds.has(String(itemId)))) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    const payloadConfig = await buildTransactionPayloadConfig();
+    const employeeMap = await fetchUserSummaries(normalized.map((entry) => entry.body.employee));
+    const now = new Date().toISOString();
+    const deliveryTimestamp = normalized[0]?.body?.timestamp;
+    const { transactionId: firstTransactionId } = await generateTransactionId(deliveryTimestamp);
+    const prefixMatch = firstTransactionId.match(/^(.*-)(\d+)$/);
+    const prefix = prefixMatch ? prefixMatch[1] : firstTransactionId;
+    const startSequence = prefixMatch ? Number.parseInt(prefixMatch[2], 10) : 1;
+
+    const createdTransactions = [];
+    for (const [index, entry] of normalized.entries()) {
+      const writePayload = buildTransactionWritePayloadFromConfig(
+        entry.body,
+        payloadConfig,
+        employeeMap,
+      );
+      const created = await insertRow('transactions', {
+        transactionId: `${prefix}${String(startSequence + index).padStart(4, '0')}`,
+        eventTimestamp: entry.body.timestamp || now,
+        ...writePayload,
+      });
+      createdTransactions.push(created);
+    }
+
+    await recalculateInventoryStocks(itemIds);
+
+    res.status(201).json(await populateTransactions(createdTransactions));
+  } catch (err) {
+    console.error('Create bulk transactions error:', err);
     const status = err.message === 'Item not found' ? 404 : 500;
     res.status(status).json({ error: status === 404 ? 'Item not found' : 'Internal server error' });
   }

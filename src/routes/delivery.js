@@ -4,6 +4,7 @@ const { fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, unique
 const { getSupabaseAdmin } = require('../lib/supabase');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
+const { recalculateInventoryStocks } = require('../lib/stock');
 
 const router = express.Router();
 
@@ -148,20 +149,36 @@ async function fetchDeliveryItemsByDeliveryIds(deliveryIds) {
   return data || [];
 }
 
+function buildDeliveryItemKey(item) {
+  const inventoryId = item.inventoryId || item.inventory_id || null;
+  const siteId = item.siteId || item.site_id || null;
+  if (inventoryId) {
+    return `inventory:${inventoryId}|site:${siteId || ''}`;
+  }
+
+  const itemName = (item.customItemName || item.item_name || '').trim().toLowerCase();
+  const itemSku = (item.customItemSku || item.item_sku || '').trim().toLowerCase();
+  const itemCategory = (item.customItemCategory || item.item_category || '').trim().toLowerCase();
+  return `custom:${itemName}|sku:${itemSku}|category:${itemCategory}|site:${siteId || ''}`;
+}
+
+function deliveryItemRowNeedsUpdate(existingRow, nextItem) {
+  return (
+    Number(existingRow.quantity || 0) !== Number(nextItem.quantity || 0) ||
+    (existingRow.inventory_id || null) !== (nextItem.inventoryId || null) ||
+    (existingRow.site_id || null) !== (nextItem.siteId || null) ||
+    (existingRow.item_name || null) !== (nextItem.customItemName || null) ||
+    (existingRow.item_sku || null) !== (nextItem.customItemSku || null) ||
+    (existingRow.item_category || null) !== (nextItem.customItemCategory || null) ||
+    (existingRow.is_issued_to_site === true) !== (nextItem.isIssuedToSite === true) ||
+    (existingRow.issued_at || null) !== (nextItem.issuedAt || null) ||
+    (existingRow.issued_by || null) !== (nextItem.issuedBy || null)
+  );
+}
+
 async function syncDeliveryItems(deliveryId, items) {
   const client = getSupabaseAdmin();
-  const { error: deleteError } = await client
-    .from('delivery_items')
-    .delete()
-    .eq('delivery_id', deliveryId);
-
-  if (deleteError) {
-    throw deleteError;
-  }
-
-  if (!items.length) {
-    return;
-  }
+  const existingRows = await fetchDeliveryItemsByDeliveryIds([deliveryId]);
 
   const supportsSiteId = await hasColumn('deliveryItems', 'siteId');
   if (!supportsSiteId && items.some((item) => item.siteId)) {
@@ -190,96 +207,115 @@ async function syncDeliveryItems(deliveryId, items) {
     throw new Error('delivery_items.issued_by column is required to save issued-by details');
   }
 
-  const payload = items.map((item) => ({
-    delivery_id: deliveryId,
-    inventory_id: item.inventoryId || null,
-    quantity: item.quantity,
-  }));
+  const toPayload = (item) => {
+    const entry = {
+      delivery_id: deliveryId,
+      inventory_id: item.inventoryId || null,
+      quantity: item.quantity,
+    };
 
-  if (supportsSiteId) {
-    for (const [index, entry] of payload.entries()) {
-      entry.site_id = items[index]?.siteId || null;
+    if (supportsSiteId) {
+      entry.site_id = item.siteId || null;
     }
-  }
-  if (supportsCustomItemName) {
-    for (const [index, entry] of payload.entries()) {
-      entry.item_name = items[index]?.customItemName || null;
+    if (supportsCustomItemName) {
+      entry.item_name = item.customItemName || null;
     }
-  }
-  if (supportsCustomItemSku) {
-    for (const [index, entry] of payload.entries()) {
-      entry.item_sku = items[index]?.customItemSku || null;
+    if (supportsCustomItemSku) {
+      entry.item_sku = item.customItemSku || null;
     }
-  }
-  if (supportsCustomItemCategory) {
-    for (const [index, entry] of payload.entries()) {
-      entry.item_category = items[index]?.customItemCategory || null;
+    if (supportsCustomItemCategory) {
+      entry.item_category = item.customItemCategory || null;
     }
-  }
-  if (supportsIssuedStatus) {
-    for (const [index, entry] of payload.entries()) {
-      entry.is_issued_to_site = items[index]?.isIssuedToSite === true;
+    if (supportsIssuedStatus) {
+      entry.is_issued_to_site = item.isIssuedToSite === true;
     }
-  }
-  if (supportsIssuedAt) {
-    for (const [index, entry] of payload.entries()) {
-      entry.issued_at = items[index]?.issuedAt || null;
+    if (supportsIssuedAt) {
+      entry.issued_at = item.issuedAt || null;
     }
-  }
-  if (supportsIssuedBy) {
-    for (const [index, entry] of payload.entries()) {
-      entry.issued_by = items[index]?.issuedBy || null;
+    if (supportsIssuedBy) {
+      entry.issued_by = item.issuedBy || null;
     }
+    return entry;
+  };
+
+  const existingByKey = new Map();
+  for (const row of existingRows) {
+    const key = buildDeliveryItemKey(row);
+    const currentRows = existingByKey.get(key) || [];
+    currentRows.push(row);
+    existingByKey.set(key, currentRows);
   }
 
-  const { error: insertError } = await client.from('delivery_items').insert(payload);
-  if (insertError) {
-    throw insertError;
-  }
-}
-
-async function recalculateInventoryStock(itemId) {
-  const inventory = await fetchById('inventory', itemId);
-  if (!inventory) {
-    return;
-  }
-
-  const [transactions, deliveryItems] = await Promise.all([
-    fetchMany('transactions', { filters: [{ column: 'inventoryId', operator: 'eq', value: itemId }] }),
-    (async () => {
-      const { data, error } = await getSupabaseAdmin()
+  const nextKeys = new Set(items.map(buildDeliveryItemKey));
+  const rowsToDelete = existingRows.filter((row) => !nextKeys.has(buildDeliveryItemKey(row)));
+  if (rowsToDelete.length) {
+    const deleteIds = rowsToDelete
+      .map((row) => row.id || row._id)
+      .filter(Boolean);
+    if (deleteIds.length) {
+      const { error: deleteError } = await client
         .from('delivery_items')
-        .select('quantity')
-        .eq('inventory_id', itemId);
-
-      if (error) {
-        throw error;
+        .delete()
+        .in('id', deleteIds);
+      if (deleteError) {
+        throw deleteError;
       }
-
-      return data || [];
-    })(),
-  ]);
-
-  let totalDelivered = 0;
-  let totalIssued = 0;
-  let totalReturned = 0;
-
-  for (const item of deliveryItems) {
-    totalDelivered += Number(item.quantity || 0);
+    }
   }
 
-  for (const transaction of transactions) {
-    if (transaction.type === 'ISSUE') totalIssued += Number(transaction.quantity || 0);
-    if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
+  const rowsToInsert = [];
+  const rowsToUpdate = [];
+
+  for (const item of items) {
+    const key = buildDeliveryItemKey(item);
+    const matchingRows = existingByKey.get(key) || [];
+    const existingRow = matchingRows.shift();
+    existingByKey.set(key, matchingRows);
+
+    if (!existingRow) {
+      rowsToInsert.push(toPayload(item));
+      continue;
+    }
+
+    if (deliveryItemRowNeedsUpdate(existingRow, item)) {
+      rowsToUpdate.push({
+        id: existingRow.id || existingRow._id,
+        payload: toPayload(item),
+      });
+    }
   }
 
-  const currentStock = Number(inventory.initialStock || 0) + totalDelivered - totalIssued + totalReturned;
-  await updateRow('inventory', itemId, { currentStock });
-}
+  const leftoverRows = Array.from(existingByKey.values()).flat();
+  if (leftoverRows.length) {
+    const extraIds = leftoverRows
+      .map((row) => row.id || row._id)
+      .filter(Boolean);
+    if (extraIds.length) {
+      const { error: deleteExtraError } = await client
+        .from('delivery_items')
+        .delete()
+        .in('id', extraIds);
+      if (deleteExtraError) {
+        throw deleteExtraError;
+      }
+    }
+  }
 
-async function recalculateInventoryStocks(itemIds) {
-  for (const itemId of uniqueIds(itemIds)) {
-    await recalculateInventoryStock(itemId);
+  if (rowsToInsert.length) {
+    const { error: insertError } = await client.from('delivery_items').insert(rowsToInsert);
+    if (insertError) {
+      throw insertError;
+    }
+  }
+
+  for (const row of rowsToUpdate) {
+    const { error: updateError } = await client
+      .from('delivery_items')
+      .update(row.payload)
+      .eq('id', row.id);
+    if (updateError) {
+      throw updateError;
+    }
   }
 }
 
