@@ -19,7 +19,7 @@ const swaggerSpec = loadRoute('./swagger');
 const { getSupabaseAdmin, getSupabaseAuth } = loadRoute('./lib/supabase');
 
 let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes;
-let uploadsRoutes, usersRoutes, transactionRoutes, aiRoutes;
+let uploadsRoutes, usersRoutes, transactionRoutes;
 let appConfigRoutes;
 
 const initRoutes = () => {
@@ -30,7 +30,6 @@ const initRoutes = () => {
   uploadsRoutes = loadRoute('./routes/uploads');
   usersRoutes = loadRoute('./routes/users');
   transactionRoutes = loadRoute('./routes/transaction');
-  aiRoutes = loadRoute('./routes/ai');
   appConfigRoutes = loadRoute('./routes/appConfig');
 };
 
@@ -100,7 +99,6 @@ try {
   app.use('/api/uploads', authMiddleware, uploadsRoutes);
   app.use('/api/users', authMiddleware, usersRoutes);
   app.use('/api/transactions', authMiddleware, transactionRoutes);
-  app.use('/api/ai', authMiddleware, aiRoutes);
   app.use('/api/app-config', appConfigRoutes);
 } catch (err) {
   console.error('Route setup error:', err);
