@@ -1,4 +1,4 @@
-const { fetchById, fetchMany, updateRow, uniqueIds } = require('./db');
+const { fetchMany, updateRow, uniqueIds } = require('./db');
 const { getSupabaseAdmin } = require('./supabase');
 
 function _toItemId(value) {

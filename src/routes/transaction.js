@@ -1,6 +1,5 @@
 const express = require('express');
 const { ID_COLUMN, fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
-const { getSupabaseAdmin } = require('../lib/supabase');
 const checkPermission = require('../middlewares/checkPermission');
 const { recalculateInventoryStocks } = require('../lib/stock');
 
