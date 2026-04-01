@@ -1,5 +1,5 @@
 const express = require('express');
-const { ID_COLUMN, fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
+const { ID_COLUMN, fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, uniqueIds } = require('../lib/db');
 const checkPermission = require('../middlewares/checkPermission');
 const { recalculateInventoryStocks } = require('../lib/stock');
 
@@ -235,6 +235,11 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
       return res.status(400).json({ error: 'Invalid transaction type' });
     }
 
+    const existingType = String(transaction.type || '').toUpperCase();
+    if (existingType && normalizedType !== existingType) {
+      return res.status(400).json({ error: 'Transaction type cannot be changed' });
+    }
+
     if (normalizedType !== 'NEW' && !site) {
       return res.status(400).json({ error: 'Site is required' });
     }
@@ -333,42 +338,7 @@ router.post('/bulk', checkPermission('addTransactions'), async (req, res) => {
 });
 
 router.put('/:id', checkPermission('editTransactions'), async (req, res) => {
-  try {
-    const transaction = await fetchById('transactions', req.params.id);
-    if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
-
-    const { type, site, item, quantity } = req.body;
-    const normalizedType = String(type || '').toUpperCase();
-
-    if (!normalizedType || !item || !quantity || Number(quantity) <= 0) {
-      return res.status(400).json({ error: 'Invalid input data' });
-    }
-
-    if (!['ISSUE', 'RETURN', 'NEW'].includes(normalizedType)) {
-      return res.status(400).json({ error: 'Invalid transaction type' });
-    }
-
-    if (normalizedType !== 'NEW' && !site) {
-      return res.status(400).json({ error: 'Site is required' });
-    }
-
-    const nextItem = await fetchById('inventory', item);
-    if (!nextItem) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-
-    const writePayload = await buildTransactionWritePayload(req.body);
-    const updated = await updateRow('transactions', req.params.id, writePayload);
-    await recalculateInventoryStocks([transaction.inventoryId, item]);
-
-    const populated = await populateTransaction(updated);
-
-    res.json(populated);
-  } catch (err) {
-    console.error('Update transaction error:', err);
-    const status = err.message === 'Item not found' ? 404 : 500;
-    res.status(status).json({ error: status === 404 ? 'Item not found' : 'Internal server error' });
-  }
+  return res.status(403).json({ error: 'Transaction editing is disabled. Transactions cannot be edited.' });
 });
 
 router.delete('/:id', checkPermission('deleteTransactions'), async (req, res) => {

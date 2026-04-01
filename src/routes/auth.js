@@ -154,6 +154,9 @@ router.get('/profile', async (req, res) => {
 
     const { user } = await verifyAccessToken(token);
     if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.isActive == false) {
+      return res.status(403).json({ message: 'Account is deactivated' });
+    }
 
     res.json(user);
   } catch (err) {

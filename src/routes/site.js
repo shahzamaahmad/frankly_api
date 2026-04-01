@@ -1,5 +1,5 @@
 const express = require('express');
-const { ID_COLUMN, fetchById, fetchMany, deleteRow, insertRow, indexById, uniqueIds, updateRow } = require('../lib/db');
+const { ID_COLUMN, fetchById, fetchMany, insertRow, indexById, uniqueIds, updateRow } = require('../lib/db');
 const checkPermission = require('../middlewares/checkPermission');
 
 const router = express.Router();
@@ -165,18 +165,9 @@ router.put('/:id', checkPermission('editSites'), async (req, res) => {
 });
 
 router.delete('/:id', checkPermission('deleteSites'), async (req, res) => {
-  try {
-    const site = await fetchById('sites', req.params.id);
-    if (!site) {
-      return res.status(404).json({ error: 'Site not found' });
-    }
-
-    await deleteRow('sites', req.params.id);
-    res.json({ message: 'Deleted' });
-  } catch (err) {
-    console.error('Delete site error:', err);
-    res.status(400).json({ error: 'Failed to delete site' });
-  }
+  return res.status(403).json({
+    error: 'Site deletion is disabled. Sites cannot be deleted.',
+  });
 });
 
 module.exports = router;
