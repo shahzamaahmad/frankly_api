@@ -2,38 +2,19 @@ require('dotenv').config();
 
 process.env.TZ = 'Asia/Dubai';
 
-const loadRoute = (path) => {
-  try {
-    return require(path);
-  } catch (err) {
-    console.error(`Failed to load route ${path}:`, err.message);
-    throw err;
-  }
-};
-
-const express = loadRoute('express');
-const cors = loadRoute('cors');
-const swaggerUi = loadRoute('swagger-ui-express');
-const swaggerSpec = loadRoute('./swagger');
-
-let authRoutes, inventoryRoutes, siteRoutes, deliveryRoutes;
-let uploadsRoutes, usersRoutes, transactionRoutes;
-let appConfigRoutes;
-
-const initRoutes = () => {
-  authRoutes = loadRoute('./routes/auth');
-  inventoryRoutes = loadRoute('./routes/inventory');
-  siteRoutes = loadRoute('./routes/site');
-  deliveryRoutes = loadRoute('./routes/delivery');
-  uploadsRoutes = loadRoute('./routes/uploads');
-  usersRoutes = loadRoute('./routes/users');
-  transactionRoutes = loadRoute('./routes/transaction');
-  appConfigRoutes = loadRoute('./routes/appConfig');
-};
-
-initRoutes();
-
-const { authMiddleware } = loadRoute('./middlewares/auth');
+const express = require('express');
+const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swagger');
+const authRoutes = require('./routes/auth');
+const inventoryRoutes = require('./routes/inventory');
+const siteRoutes = require('./routes/site');
+const deliveryRoutes = require('./routes/delivery');
+const uploadsRoutes = require('./routes/uploads');
+const usersRoutes = require('./routes/users');
+const transactionRoutes = require('./routes/transaction');
+const appConfigRoutes = require('./routes/appConfig');
+const { authMiddleware } = require('./middlewares/auth');
 
 const app = express();
 

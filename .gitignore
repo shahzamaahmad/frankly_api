@@ -34,3 +34,5 @@ uploads/
 # Database dumps
 *.sql
 *.dump
+
+.vercel
