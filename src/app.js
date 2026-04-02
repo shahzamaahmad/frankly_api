@@ -64,7 +64,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
