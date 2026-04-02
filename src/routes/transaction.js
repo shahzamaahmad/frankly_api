@@ -11,6 +11,7 @@ const DIRECT_TRANSACTION_TYPES = [
   'NEW',
   'EMPLOYEE ISSUE',
   'CONSUMED',
+  'SITE TRANSFER',
 ];
 
 function normalizeTransactionType(value) {
@@ -63,18 +64,71 @@ async function fetchUserSummaries(ids) {
   })));
 }
 
+function normalizeSiteLabel(site) {
+  const siteCode = String(site?.siteCode || '').trim().toUpperCase();
+  const siteName = String(site?.siteName || site?.name || '').trim().toUpperCase();
+  return siteCode === 'WAREHOUSE' || siteName === 'WAREHOUSE';
+}
+
+async function resolveWarehouseSiteId() {
+  const sites = await fetchMany('sites');
+  const warehouseSite = sites.find(normalizeSiteLabel);
+  return warehouseSite ? String(warehouseSite.id || warehouseSite._id || '') : null;
+}
+
 function getTransactionEmployeeId(transaction) {
   return transaction.employeeId || transaction.employee_id || transaction.employee || null;
 }
 
 async function buildTransactionWritePayload(body) {
+  const normalizedType = normalizeTransactionType(body.type);
+  const explicitFromSite = body.fromSite || body.fromSiteId || null;
+  const explicitToSite = body.toSite || body.toSiteId || null;
+  const legacySite = body.site || null;
+  const warehouseSiteId = body.warehouseSite || await resolveWarehouseSiteId();
+  let fromSiteId = explicitFromSite;
+  let toSiteId = explicitToSite;
+
+  switch (normalizedType) {
+    case 'ISSUE':
+      fromSiteId = fromSiteId || warehouseSiteId;
+      toSiteId = toSiteId || legacySite;
+      break;
+    case 'RETURN':
+      fromSiteId = fromSiteId || legacySite;
+      toSiteId = toSiteId || warehouseSiteId;
+      break;
+    case 'EMPLOYEE ISSUE':
+      fromSiteId = fromSiteId || warehouseSiteId;
+      break;
+    case 'CONSUMED':
+      fromSiteId = fromSiteId || warehouseSiteId;
+      toSiteId = toSiteId || legacySite;
+      break;
+    case 'SITE TRANSFER':
+      fromSiteId = fromSiteId || legacySite;
+      break;
+    case 'NEW':
+    case 'DELIVERY':
+      toSiteId = toSiteId || warehouseSiteId;
+      break;
+    default:
+      break;
+  }
+
   const payload = {
-    type: normalizeTransactionType(body.type),
-    siteId: body.site || null,
+    type: normalizedType,
     inventoryId: body.item,
     quantity: Number(body.quantity),
     returnCondition: body.returnDetails?.condition || null,
   };
+
+  if (await hasColumn('transactions', 'fromSiteId')) {
+    payload.fromSiteId = fromSiteId;
+  }
+  if (await hasColumn('transactions', 'toSiteId')) {
+    payload.toSiteId = toSiteId;
+  }
 
   if (await hasColumn('transactions', 'notes')) {
     payload.notes = body.returnDetails?.notes || null;
@@ -105,11 +159,15 @@ async function buildTransactionPayloadConfig() {
     supportsEmployeeId,
     supportsEmployee,
     supportsEmployeeName,
+    supportsFromSiteId,
+    supportsToSiteId,
   ] = await Promise.all([
     hasColumn('transactions', 'notes'),
     hasColumn('transactions', 'employeeId'),
     hasColumn('transactions', 'employee'),
     hasColumn('transactions', 'employeeName'),
+    hasColumn('transactions', 'fromSiteId'),
+    hasColumn('transactions', 'toSiteId'),
   ]);
 
   return {
@@ -117,17 +175,60 @@ async function buildTransactionPayloadConfig() {
     supportsEmployeeId,
     supportsEmployee,
     supportsEmployeeName,
+    supportsFromSiteId,
+    supportsToSiteId,
   };
 }
 
 function buildTransactionWritePayloadFromConfig(body, config, employeeMap = new Map()) {
+  const normalizedType = normalizeTransactionType(body.type);
+  const explicitFromSite = body.fromSite || body.fromSiteId || null;
+  const explicitToSite = body.toSite || body.toSiteId || null;
+  const legacySite = body.site || null;
+  const warehouseSiteId = body.warehouseSite || null;
+  let fromSiteId = explicitFromSite;
+  let toSiteId = explicitToSite;
+
+  switch (normalizedType) {
+    case 'ISSUE':
+      fromSiteId = fromSiteId || warehouseSiteId;
+      toSiteId = toSiteId || legacySite;
+      break;
+    case 'RETURN':
+      fromSiteId = fromSiteId || legacySite;
+      toSiteId = toSiteId || warehouseSiteId;
+      break;
+    case 'EMPLOYEE ISSUE':
+      fromSiteId = fromSiteId || warehouseSiteId;
+      break;
+    case 'CONSUMED':
+      fromSiteId = fromSiteId || warehouseSiteId;
+      toSiteId = toSiteId || legacySite;
+      break;
+    case 'SITE TRANSFER':
+      fromSiteId = fromSiteId || legacySite;
+      break;
+    case 'NEW':
+    case 'DELIVERY':
+      toSiteId = toSiteId || warehouseSiteId;
+      break;
+    default:
+      break;
+  }
+
   const payload = {
-    type: normalizeTransactionType(body.type),
-    siteId: body.site || null,
+    type: normalizedType,
     inventoryId: body.item,
     quantity: Number(body.quantity),
     returnCondition: body.returnDetails?.condition || null,
   };
+
+  if (config.supportsFromSiteId) {
+    payload.fromSiteId = fromSiteId;
+  }
+  if (config.supportsToSiteId) {
+    payload.toSiteId = toSiteId;
+  }
 
   if (config.supportsNotes) {
     payload.notes = body.returnDetails?.notes || null;
@@ -157,7 +258,11 @@ async function populateTransactions(transactions) {
     return [];
   }
 
-  const siteIds = uniqueIds(transactions.map((transaction) => transaction.siteId));
+  const siteIds = uniqueIds([
+    ...transactions.map((transaction) => transaction.fromSiteId),
+    ...transactions.map((transaction) => transaction.toSiteId),
+    ...transactions.map((transaction) => transaction.siteId),
+  ]);
   const itemIds = uniqueIds(transactions.map((transaction) => transaction.inventoryId));
   const employeeIds = uniqueIds(transactions.map((transaction) => getTransactionEmployeeId(transaction)));
 
@@ -181,19 +286,31 @@ async function populateTransactions(transactions) {
   return transactions.map((transaction) => {
     const employeeId = getTransactionEmployeeId(transaction);
     const employee = employeeId ? (employees.get(String(employeeId)) || employeeId) : null;
+    const fromSite = transaction.fromSiteId
+      ? (siteMap.get(String(transaction.fromSiteId)) || transaction.fromSiteId)
+      : null;
+    const toSite = transaction.toSiteId
+      ? (siteMap.get(String(transaction.toSiteId)) || transaction.toSiteId)
+      : null;
+    const legacySite = transaction.siteId
+      ? (siteMap.get(String(transaction.siteId)) || transaction.siteId)
+      : null;
+    const compatibilitySite = toSite || fromSite || legacySite;
 
     return ({
-    ...transaction,
-    employee,
-    site: transaction.siteId ? (siteMap.get(String(transaction.siteId)) || transaction.siteId) : transaction.siteId,
-    item: transaction.inventoryId ? (itemMap.get(String(transaction.inventoryId)) || transaction.inventoryId) : transaction.inventoryId,
-    timestamp: transaction.eventTimestamp || transaction.timestamp,
-    returnDetails: (transaction.returnCondition || transaction.notes)
-      ? {
-        condition: transaction.returnCondition || '',
-        notes: transaction.notes || null,
-      }
-      : null,
+      ...transaction,
+      employee,
+      fromSite,
+      toSite,
+      site: compatibilitySite,
+      item: transaction.inventoryId ? (itemMap.get(String(transaction.inventoryId)) || transaction.inventoryId) : transaction.inventoryId,
+      timestamp: transaction.eventTimestamp || transaction.timestamp,
+      returnDetails: (transaction.returnCondition || transaction.notes)
+        ? {
+          condition: transaction.returnCondition || '',
+          notes: transaction.notes || null,
+        }
+        : null,
     });
   });
 }
@@ -264,6 +381,17 @@ function validateTransactionInput(body) {
     return 'Employee is required for employee issue transactions';
   }
 
+  if (normalizedType === 'SITE TRANSFER') {
+    const fromSite = body?.fromSite || body?.site;
+    const toSite = body?.toSite || body?.toSiteId;
+    if (!fromSite || !toSite) {
+      return 'Source and destination sites are required for site transfer transactions';
+    }
+    if (String(fromSite) === String(toSite)) {
+      return 'Source and destination sites must be different';
+    }
+  }
+
   return null;
 }
 
@@ -298,9 +426,23 @@ function isStoredSiteTransferTransaction(transaction) {
   const type = normalizeTransactionType(transaction?.type);
   const notes = String(transaction?.notes || '').trim().toLowerCase();
   return (
+    type === 'SITE TRANSFER' ||
     (type === 'RETURN' && notes.includes('site transfer to ')) ||
     (type === 'ISSUE' && notes.includes('site transfer from '))
   );
+}
+
+function transactionTouchesSite(transaction, siteId) {
+  const normalizedSiteId = String(siteId || '');
+  if (!normalizedSiteId) {
+    return false;
+  }
+
+  return [
+    transaction.siteId,
+    transaction.fromSiteId,
+    transaction.toSiteId,
+  ].some((value) => String(value || '') == normalizedSiteId);
 }
 
 async function getDeleteBlockReason(transaction) {
@@ -336,7 +478,6 @@ router.get('/', checkPermission('viewTransactions'), async (req, res) => {
     const includeDelivery = String(req.query.includeDelivery || '')
       .trim()
       .toLowerCase() === 'true';
-    if (req.query.site && typeof req.query.site === 'string') filters.push({ column: 'siteId', operator: 'eq', value: req.query.site });
     if (req.query.item && typeof req.query.item === 'string') filters.push({ column: 'inventoryId', operator: 'eq', value: req.query.item });
     if (req.query.employee && typeof req.query.employee === 'string') {
       if (await hasColumn('transactions', 'employeeId')) {
@@ -354,11 +495,15 @@ router.get('/', checkPermission('viewTransactions'), async (req, res) => {
       ascending: false,
     });
 
-    const visibleTransactions = includeDelivery
-      ? transactions
-      : transactions.filter(
-        (transaction) => normalizeTransactionType(transaction.type) !== 'DELIVERY',
-      );
+    const visibleTransactions = transactions.filter((transaction) => {
+      if (!includeDelivery && normalizeTransactionType(transaction.type) === 'DELIVERY') {
+        return false;
+      }
+      if (req.query.site && typeof req.query.site === 'string') {
+        return transactionTouchesSite(transaction, req.query.site);
+      }
+      return true;
+    });
 
     res.json(await populateTransactions(visibleTransactions));
   } catch (err) {
@@ -393,7 +538,10 @@ router.post('/', checkPermission('addTransactions'), async (req, res) => {
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    const writePayload = await buildTransactionWritePayload(req.body);
+    const writePayload = await buildTransactionWritePayload({
+      ...req.body,
+      warehouseSite: req.body?.warehouseSite || await resolveWarehouseSiteId(),
+    });
     const transaction = await insertRow('transactions', {
       transactionId,
       eventTimestamp: createdTimestamp,
@@ -442,6 +590,7 @@ router.post('/bulk', checkPermission('addTransactions'), async (req, res) => {
     }
 
     const payloadConfig = await buildTransactionPayloadConfig();
+    const warehouseSiteId = await resolveWarehouseSiteId();
     const employeeMap = await fetchUserSummaries(normalized.map((entry) => entry.body.employee));
     const now = new Date().toISOString();
     const deliveryTimestamp = normalized[0]?.body?.timestamp;
@@ -453,7 +602,10 @@ router.post('/bulk', checkPermission('addTransactions'), async (req, res) => {
     const createdTransactions = [];
     for (const [index, entry] of normalized.entries()) {
       const writePayload = buildTransactionWritePayloadFromConfig(
-        entry.body,
+        {
+          ...entry.body,
+          warehouseSite: entry.body.warehouseSite || warehouseSiteId,
+        },
         payloadConfig,
         employeeMap,
       );

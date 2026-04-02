@@ -41,6 +41,18 @@ function normalizeTransactionType(value) {
   return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
 }
 
+function normalizeSiteLabel(site) {
+  const siteCode = String(site?.siteCode || '').trim().toUpperCase();
+  const siteName = String(site?.siteName || site?.name || '').trim().toUpperCase();
+  return siteCode === 'WAREHOUSE' || siteName === 'WAREHOUSE';
+}
+
+async function resolveWarehouseSiteId() {
+  const sites = await fetchMany('sites');
+  const warehouseSite = sites.find(normalizeSiteLabel);
+  return warehouseSite ? String(warehouseSite.id || warehouseSite._id || '') : null;
+}
+
 function readItemId(item) {
   if (!item) {
     return null;
@@ -51,32 +63,6 @@ function readItemId(item) {
   }
 
   return item.itemName || item.inventoryId || item.itemId || item.id || null;
-}
-
-function readEntityId(value) {
-  if (!value) {
-    return null;
-  }
-
-  if (typeof value === 'object') {
-    return value.id || value._id || value.row_id || null;
-  }
-
-  return value;
-}
-
-function toBoolean(value) {
-  if (typeof value === 'boolean') {
-    return value;
-  }
-  if (typeof value === 'number') {
-    return value !== 0;
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    return normalized === 'true' || normalized === '1' || normalized === 'yes';
-  }
-  return false;
 }
 
 function parseAmount(value) {
@@ -122,7 +108,6 @@ function normalizeItems(items) {
       return {
         inventoryId: readItemId(item),
         quantity: Number(item?.quantity || 0),
-        siteId: readEntityId(item?.site) || readEntityId(item?.siteId) || null,
         customItemName: (
           item?.customItemName ||
           item?.itemNameText ||
@@ -142,9 +127,6 @@ function normalizeItems(items) {
           nestedItemCategory ||
           ''
         ).trim(),
-        isIssuedToSite: toBoolean(item?.isIssuedToSite),
-        issuedAt: item?.issuedAt || null,
-        issuedBy: (item?.issuedBy || '').trim(),
       };
     })
     .filter((item) => (item.inventoryId || item.customItemName) && item.quantity > 0);
@@ -289,9 +271,7 @@ async function getDeliveryColumnSupport() {
     hasColumn('transactions', 'customItemName'),
     hasColumn('transactions', 'customItemSku'),
     hasColumn('transactions', 'customItemCategory'),
-    hasColumn('transactions', 'isIssuedToSite'),
-    hasColumn('transactions', 'issuedAt'),
-    hasColumn('transactions', 'issuedBy'),
+    hasColumn('transactions', 'toSiteId'),
   ]);
 
   return {
@@ -306,9 +286,7 @@ async function getDeliveryColumnSupport() {
     customItemName: columns[8],
     customItemSku: columns[9],
     customItemCategory: columns[10],
-    isIssuedToSite: columns[11],
-    issuedAt: columns[12],
-    issuedBy: columns[13],
+    toSiteId: columns[11],
   };
 }
 
@@ -318,6 +296,7 @@ async function buildDeliveryTransactionPayloads({
   deliveryId,
 }) {
   const columnSupport = await getDeliveryColumnSupport();
+  const warehouseSiteId = await resolveWarehouseSiteId();
   if (!columnSupport.deliveryId) {
     throw new Error('transactions.delivery_id column is required');
   }
@@ -354,7 +333,7 @@ async function buildDeliveryTransactionPayloads({
     transactionId: `${deliveryId}-${String(index + 1).padStart(2, '0')}`,
     ...sharedFields,
     inventoryId: item.inventoryId || null,
-    siteId: item.siteId || null,
+    ...(columnSupport.toSiteId ? { toSiteId: warehouseSiteId } : {}),
     quantity: item.quantity,
     ...(columnSupport.customItemName
       ? { customItemName: item.customItemName || null }
@@ -364,13 +343,6 @@ async function buildDeliveryTransactionPayloads({
       : {}),
     ...(columnSupport.customItemCategory
       ? { customItemCategory: item.customItemCategory || null }
-      : {}),
-    ...(columnSupport.isIssuedToSite
-      ? { isIssuedToSite: item.isIssuedToSite === true }
-      : {}),
-    ...(columnSupport.issuedAt ? { issuedAt: item.issuedAt || null } : {}),
-    ...(columnSupport.issuedBy
-      ? { issuedBy: item.issuedBy || null }
       : {}),
   }));
 }
@@ -414,16 +386,10 @@ async function populateDeliveriesFromRows(rows) {
   }
 
   const inventoryIds = uniqueIds(rows.map((row) => row.inventoryId));
-  const siteIds = uniqueIds(rows.map((row) => row.siteId));
-  const [inventory, sites] = await Promise.all([
+  const [inventory] = await Promise.all([
     inventoryIds.length
       ? fetchMany('inventory', {
           filters: [{ column: ID_COLUMN, operator: 'in', value: inventoryIds }],
-        })
-      : [],
-    siteIds.length
-      ? fetchMany('sites', {
-          filters: [{ column: ID_COLUMN, operator: 'in', value: siteIds }],
         })
       : [],
   ]);
@@ -435,14 +401,6 @@ async function populateDeliveriesFromRows(rows) {
       sku: item.sku,
     })),
   );
-  const siteMap = indexById(
-    sites.map((site) => ({
-      id: site.id || site._id,
-      siteName: site.siteName,
-      name: site.siteName || site.name,
-    })),
-  );
-
   const grouped = new Map();
   for (const row of rows) {
     const groupId = String(row.deliveryId || row.id || row._id);
@@ -476,11 +434,7 @@ async function populateDeliveriesFromRows(rows) {
               category: row.customItemCategory || '',
             },
         quantity: Number(row.quantity || 0),
-        site: row.siteId ? (siteMap.get(String(row.siteId)) || row.siteId) : null,
         customItemCategory: row.customItemCategory || null,
-        isIssuedToSite: row.isIssuedToSite === true,
-        issuedAt: row.issuedAt || null,
-        issuedBy: row.issuedBy || null,
       })),
     };
   });
