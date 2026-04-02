@@ -4,9 +4,9 @@ const { fetchById, fetchMany, deleteRow, hasColumn, insertRow, updateRow } = req
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
 const {
-  isStockOutTransaction,
-  normalizeTransactionType,
-} = require('../lib/transactionType');
+  recalculateAllInventoryStock: recalculateAllInventoryStockShared,
+  recalculateInventoryStock: recalculateInventoryStockShared,
+} = require('../lib/stock');
 
 const router = express.Router();
 
@@ -132,93 +132,12 @@ function normalizeInventoryPayload(body) {
   return payload;
 }
 
-async function calculateCurrentStock(itemId, initialStockOverride) {
-  const [transactions] = await Promise.all([
-    fetchMany('transactions', {
-      filters: [{ column: 'inventoryId', operator: 'eq', value: itemId }],
-    }),
-  ]);
-
-  let totalIssued = 0;
-  let totalReturned = 0;
-  let totalNew = 0;
-  let totalDelivered = 0;
-
-  for (const transaction of transactions) {
-    const normalizedType = normalizeTransactionType(transaction.type);
-    if (normalizedType === 'DELIVERY') {
-      totalDelivered += Number(transaction.quantity || 0);
-    }
-    else if (isStockOutTransaction(normalizedType)) {
-      totalIssued += Number(transaction.quantity || 0);
-    }
-    else if (normalizedType === 'RETURN') totalReturned += Number(transaction.quantity || 0);
-    else if (normalizedType === 'NEW') totalNew += Number(transaction.quantity || 0);
-  }
-
-  return Number(initialStockOverride || 0) + totalDelivered - totalIssued + totalReturned + totalNew;
-}
-
 async function recalculateInventoryStock(itemId, initialStockOverride) {
-  const currentStock = await calculateCurrentStock(itemId, initialStockOverride);
-  await updateRow('inventory', itemId, { currentStock });
-  return currentStock;
+  return recalculateInventoryStockShared(itemId, initialStockOverride);
 }
 
 async function recalculateAllInventoryStock() {
-  const [items, transactions] = await Promise.all([
-    fetchMany('inventory'),
-    fetchMany('transactions'),
-  ]);
-
-  const issuedByItem = new Map();
-  const returnedByItem = new Map();
-  const newByItem = new Map();
-  const deliveredByItem = new Map();
-
-  for (const transaction of transactions) {
-    const itemId = String(transaction.inventoryId || '');
-    if (!itemId) {
-      continue;
-    }
-
-    const quantity = Number(transaction.quantity || 0);
-    const normalizedType = normalizeTransactionType(transaction.type);
-    if (normalizedType === 'DELIVERY') {
-      deliveredByItem.set(itemId, (deliveredByItem.get(itemId) || 0) + quantity);
-    } else if (isStockOutTransaction(normalizedType)) {
-      issuedByItem.set(itemId, (issuedByItem.get(itemId) || 0) + quantity);
-    } else if (normalizedType === 'RETURN') {
-      returnedByItem.set(itemId, (returnedByItem.get(itemId) || 0) + quantity);
-    } else if (normalizedType === 'NEW') {
-      newByItem.set(itemId, (newByItem.get(itemId) || 0) + quantity);
-    }
-  }
-
-  const updates = items.map(async (item) => {
-    const itemId = String(item.id || item._id || '');
-    const currentStock =
-      Number(item.initialStock || 0) +
-      (deliveredByItem.get(itemId) || 0) -
-      (issuedByItem.get(itemId) || 0) +
-      (returnedByItem.get(itemId) || 0) +
-      (newByItem.get(itemId) || 0);
-
-    await updateRow('inventory', itemId, { currentStock });
-    return { id: itemId, currentStock };
-  });
-
-  const results = [];
-  const chunkSize = 25;
-  for (let index = 0; index < updates.length; index += chunkSize) {
-    const chunk = updates.slice(index, index + chunkSize);
-    results.push(...await Promise.all(chunk));
-  }
-
-  return {
-    total: items.length,
-    updated: results.length,
-  };
+  return recalculateAllInventoryStockShared();
 }
 
 async function uploadInventoryImage(req, body) {

@@ -1,4 +1,4 @@
-const { fetchMany, updateRow, uniqueIds } = require('./db');
+const { fetchMany, hasColumn, updateRow, uniqueIds } = require('./db');
 const {
   isStockOutTransaction,
   normalizeTransactionType,
@@ -9,6 +9,78 @@ function _toItemId(value) {
     return '';
   }
   return String(value);
+}
+
+function _normalizeSiteLabel(site) {
+  const siteCode = String(site?.siteCode || '').trim().toUpperCase();
+  const siteName = String(site?.siteName || site?.name || '').trim().toUpperCase();
+  return siteCode === 'WAREHOUSE' || siteName === 'WAREHOUSE';
+}
+
+function _transactionTimestampValue(transaction) {
+  const value =
+    transaction?.deliveryDate ||
+    transaction?.eventTimestamp ||
+    transaction?.timestamp ||
+    null;
+  const parsed = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function _transactionIdentityValue(transaction) {
+  return String(
+    transaction?.transactionId ||
+      transaction?.deliveryId ||
+      transaction?.id ||
+      transaction?._id ||
+      '',
+  );
+}
+
+function _pickLaterTransaction(candidate, current) {
+  if (!current) {
+    return candidate;
+  }
+
+  const candidateTimestamp = _transactionTimestampValue(candidate);
+  const currentTimestamp = _transactionTimestampValue(current);
+  if (candidateTimestamp !== currentTimestamp) {
+    return candidateTimestamp > currentTimestamp ? candidate : current;
+  }
+
+  return _transactionIdentityValue(candidate) > _transactionIdentityValue(current)
+    ? candidate
+    : current;
+}
+
+function _resolveLocationSiteIdFromTransaction(transaction, warehouseSiteId) {
+  const normalizedType = normalizeTransactionType(transaction?.type);
+
+  if (transaction?.toSiteId) {
+    return String(transaction.toSiteId);
+  }
+
+  if (transaction?.siteId) {
+    if (
+      normalizedType === 'RETURN' ||
+      normalizedType === 'NEW' ||
+      normalizedType === 'DELIVERY' ||
+      normalizedType === 'EMPLOYEE ISSUE'
+    ) {
+      return warehouseSiteId;
+    }
+    return String(transaction.siteId);
+  }
+
+  if (transaction?.fromSiteId) {
+    return String(transaction.fromSiteId);
+  }
+
+  if (normalizedType === 'NEW' || normalizedType === 'DELIVERY') {
+    return warehouseSiteId;
+  }
+
+  return null;
 }
 
 function _buildStockMap(items, transactions, initialStockOverrides = new Map()) {
@@ -60,6 +132,83 @@ function _buildStockMap(items, transactions, initialStockOverrides = new Map()) 
   return result;
 }
 
+async function _resolveInventoryLocationUpdates(items, transactions) {
+  const [supportsLocation, supportsLocationSiteId, sites] = await Promise.all([
+    hasColumn('inventory', 'location'),
+    hasColumn('inventory', 'locationSiteId'),
+    fetchMany('sites'),
+  ]);
+
+  if (!supportsLocation && !supportsLocationSiteId) {
+    return new Map();
+  }
+
+  const siteMap = new Map(
+    sites.map((site) => [
+      String(site.id || site._id || ''),
+      site,
+    ]),
+  );
+  const warehouseSite = sites.find(_normalizeSiteLabel) || null;
+  const warehouseSiteId = warehouseSite
+    ? String(warehouseSite.id || warehouseSite._id || '')
+    : null;
+  const latestLocationTransactionByItem = new Map();
+
+  for (const transaction of transactions) {
+    const itemId = _toItemId(transaction.inventoryId);
+    if (!itemId) {
+      continue;
+    }
+
+    const locationSiteId = _resolveLocationSiteIdFromTransaction(
+      transaction,
+      warehouseSiteId,
+    );
+    if (!locationSiteId) {
+      continue;
+    }
+
+    latestLocationTransactionByItem.set(
+      itemId,
+      _pickLaterTransaction(
+        transaction,
+        latestLocationTransactionByItem.get(itemId),
+      ),
+    );
+  }
+
+  const updates = new Map();
+  for (const item of items) {
+    const itemId = _toItemId(item.id || item._id);
+    if (!itemId) {
+      continue;
+    }
+
+    const latestTransaction = latestLocationTransactionByItem.get(itemId);
+    const resolvedSiteId = latestTransaction
+      ? _resolveLocationSiteIdFromTransaction(latestTransaction, warehouseSiteId)
+      : String(item.locationSiteId || item.location_site_id || '');
+    const resolvedSite = resolvedSiteId ? siteMap.get(resolvedSiteId) : null;
+    const nextLocation =
+      resolvedSite?.siteName ||
+      resolvedSite?.name ||
+      item.location ||
+      'Warehouse';
+
+    updates.set(itemId, {
+      ...(supportsLocation ? { location: nextLocation } : {}),
+      ...(supportsLocationSiteId
+        ? {
+            locationSiteId: resolvedSiteId || null,
+          }
+        : {}),
+    });
+  }
+
+  return updates;
+}
+
 async function calculateInventoryStocks(itemIds, initialStockOverrides = new Map()) {
   const uniqueItemIds = uniqueIds(itemIds).map((value) => String(value));
   if (!uniqueItemIds.length) {
@@ -79,15 +228,30 @@ async function calculateInventoryStocks(itemIds, initialStockOverrides = new Map
 }
 
 async function recalculateInventoryStocks(itemIds, initialStockOverrides = new Map()) {
-  const stockMap = await calculateInventoryStocks(itemIds, initialStockOverrides);
+  const uniqueItemIds = uniqueIds(itemIds).map((value) => String(value));
+  const [items, transactions] = await Promise.all([
+    uniqueItemIds.length
+      ? fetchMany('inventory', {
+          filters: [{ column: 'id', operator: 'in', value: uniqueItemIds }],
+        })
+      : [],
+    uniqueItemIds.length
+      ? fetchMany('transactions', {
+          filters: [{ column: 'inventoryId', operator: 'in', value: uniqueItemIds }],
+        })
+      : [],
+  ]);
+  const stockMap = _buildStockMap(items, transactions, initialStockOverrides);
+  const locationUpdates = await _resolveInventoryLocationUpdates(items, transactions);
   const entries = Array.from(stockMap.entries());
 
   for (let index = 0; index < entries.length; index += 25) {
     const chunk = entries.slice(index, index + 25);
     await Promise.all(
-      chunk.map(([itemId, currentStock]) =>
-        updateRow('inventory', itemId, { currentStock }),
-      ),
+      chunk.map(([itemId, currentStock]) => {
+        const locationUpdate = locationUpdates.get(itemId) || {};
+        return updateRow('inventory', itemId, { currentStock, ...locationUpdate });
+      }),
     );
   }
 
@@ -116,14 +280,16 @@ async function recalculateAllInventoryStock() {
   ]);
 
   const stockMap = _buildStockMap(items, transactions);
+  const locationUpdates = await _resolveInventoryLocationUpdates(items, transactions);
   const entries = Array.from(stockMap.entries());
 
   for (let index = 0; index < entries.length; index += 25) {
     const chunk = entries.slice(index, index + 25);
     await Promise.all(
-      chunk.map(([itemId, currentStock]) =>
-        updateRow('inventory', itemId, { currentStock }),
-      ),
+      chunk.map(([itemId, currentStock]) => {
+        const locationUpdate = locationUpdates.get(itemId) || {};
+        return updateRow('inventory', itemId, { currentStock, ...locationUpdate });
+      }),
     );
   }
 
