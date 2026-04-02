@@ -93,43 +93,11 @@ function normalizeItems(items) {
   }
 
   return source
-    .map((item) => {
-      const itemNameValue = item?.itemName;
-      const nestedItemName = typeof itemNameValue === 'object'
-        ? (itemNameValue.name || itemNameValue.itemName || '')
-        : '';
-      const nestedItemSku = typeof itemNameValue === 'object'
-        ? (itemNameValue.sku || '')
-        : '';
-      const nestedItemCategory = typeof itemNameValue === 'object'
-        ? (itemNameValue.category || '')
-        : '';
-
-      return {
-        inventoryId: readItemId(item),
-        quantity: Number(item?.quantity || 0),
-        customItemName: (
-          item?.customItemName ||
-          item?.itemNameText ||
-          item?.name ||
-          nestedItemName ||
-          ''
-        ).trim(),
-        customItemSku: (
-          item?.customItemSku ||
-          item?.sku ||
-          nestedItemSku ||
-          ''
-        ).trim(),
-        customItemCategory: (
-          item?.customItemCategory ||
-          item?.category ||
-          nestedItemCategory ||
-          ''
-        ).trim(),
-      };
-    })
-    .filter((item) => (item.inventoryId || item.customItemName) && item.quantity > 0);
+    .map((item) => ({
+      inventoryId: readItemId(item),
+      quantity: Number(item?.quantity || 0),
+    }))
+    .filter((item) => item.inventoryId && item.quantity > 0);
 }
 
 async function uploadInvoice(req, body) {
@@ -268,9 +236,6 @@ async function getDeliveryColumnSupport() {
     hasColumn('transactions', 'invoiceImage'),
     hasColumn('transactions', 'invoiceNumber'),
     hasColumn('transactions', 'deliveryRemarks'),
-    hasColumn('transactions', 'customItemName'),
-    hasColumn('transactions', 'customItemSku'),
-    hasColumn('transactions', 'customItemCategory'),
     hasColumn('transactions', 'toSiteId'),
   ]);
 
@@ -283,10 +248,7 @@ async function getDeliveryColumnSupport() {
     invoiceImage: columns[5],
     invoiceNumber: columns[6],
     deliveryRemarks: columns[7],
-    customItemName: columns[8],
-    customItemSku: columns[9],
-    customItemCategory: columns[10],
-    toSiteId: columns[11],
+    toSiteId: columns[8],
   };
 }
 
@@ -299,10 +261,6 @@ async function buildDeliveryTransactionPayloads({
   const warehouseSiteId = await resolveWarehouseSiteId();
   if (!columnSupport.deliveryId) {
     throw new Error('transactions.delivery_id column is required');
-  }
-  if (items.some((item) => !item.inventoryId && item.customItemName) &&
-      !columnSupport.customItemName) {
-    throw new Error('transactions.custom_item_name column is required for custom delivery items');
   }
 
   const deliveryDateIso =
@@ -332,18 +290,9 @@ async function buildDeliveryTransactionPayloads({
   return items.map((item, index) => ({
     transactionId: `${deliveryId}-${String(index + 1).padStart(2, '0')}`,
     ...sharedFields,
-    inventoryId: item.inventoryId || null,
+    inventoryId: item.inventoryId,
     ...(columnSupport.toSiteId ? { toSiteId: warehouseSiteId } : {}),
     quantity: item.quantity,
-    ...(columnSupport.customItemName
-      ? { customItemName: item.customItemName || null }
-      : {}),
-    ...(columnSupport.customItemSku
-      ? { customItemSku: item.customItemSku || null }
-      : {}),
-    ...(columnSupport.customItemCategory
-      ? { customItemCategory: item.customItemCategory || null }
-      : {}),
   }));
 }
 
@@ -426,15 +375,8 @@ async function populateDeliveriesFromRows(rows) {
       invoiceImage: head.invoiceImage || null,
       invoiceNumber: head.invoiceNumber || null,
       items: sortedRows.map((row) => ({
-        itemName: row.inventoryId
-          ? (inventoryMap.get(String(row.inventoryId)) || row.inventoryId)
-          : {
-              name: row.customItemName || 'Custom Item',
-              sku: row.customItemSku || '',
-              category: row.customItemCategory || '',
-            },
+        itemName: inventoryMap.get(String(row.inventoryId)) || row.inventoryId,
         quantity: Number(row.quantity || 0),
-        customItemCategory: row.customItemCategory || null,
       })),
     };
   });
