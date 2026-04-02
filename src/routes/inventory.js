@@ -3,6 +3,10 @@ const multer = require('multer');
 const { fetchById, fetchMany, deleteRow, hasColumn, insertRow, updateRow } = require('../lib/db');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
+const {
+  isStockOutTransaction,
+  normalizeTransactionType,
+} = require('../lib/transactionType');
 
 const router = express.Router();
 
@@ -85,18 +89,15 @@ async function calculateCurrentStock(itemId, initialStockOverride) {
   let totalDelivered = 0;
 
   for (const transaction of transactions) {
-    if (transaction.type === 'DELIVERY') {
+    const normalizedType = normalizeTransactionType(transaction.type);
+    if (normalizedType === 'DELIVERY') {
       totalDelivered += Number(transaction.quantity || 0);
     }
-    else if (
-      transaction.type === 'ISSUE' ||
-      transaction.type === 'EMPLOYEE ISSUE' ||
-      transaction.type === 'CONSUMED'
-    ) {
+    else if (isStockOutTransaction(normalizedType)) {
       totalIssued += Number(transaction.quantity || 0);
     }
-    else if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
-    else if (transaction.type === 'NEW') totalNew += Number(transaction.quantity || 0);
+    else if (normalizedType === 'RETURN') totalReturned += Number(transaction.quantity || 0);
+    else if (normalizedType === 'NEW') totalNew += Number(transaction.quantity || 0);
   }
 
   return Number(initialStockOverride || 0) + totalDelivered - totalIssued + totalReturned + totalNew;
@@ -126,17 +127,14 @@ async function recalculateAllInventoryStock() {
     }
 
     const quantity = Number(transaction.quantity || 0);
-    if (transaction.type === 'DELIVERY') {
+    const normalizedType = normalizeTransactionType(transaction.type);
+    if (normalizedType === 'DELIVERY') {
       deliveredByItem.set(itemId, (deliveredByItem.get(itemId) || 0) + quantity);
-    } else if (
-      transaction.type === 'ISSUE' ||
-      transaction.type === 'EMPLOYEE ISSUE' ||
-      transaction.type === 'CONSUMED'
-    ) {
+    } else if (isStockOutTransaction(normalizedType)) {
       issuedByItem.set(itemId, (issuedByItem.get(itemId) || 0) + quantity);
-    } else if (transaction.type === 'RETURN') {
+    } else if (normalizedType === 'RETURN') {
       returnedByItem.set(itemId, (returnedByItem.get(itemId) || 0) + quantity);
-    } else if (transaction.type === 'NEW') {
+    } else if (normalizedType === 'NEW') {
       newByItem.set(itemId, (newByItem.get(itemId) || 0) + quantity);
     }
   }

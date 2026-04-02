@@ -1,4 +1,8 @@
 const { fetchMany, updateRow, uniqueIds } = require('./db');
+const {
+  isStockOutTransaction,
+  normalizeTransactionType,
+} = require('./transactionType');
 
 function _toItemId(value) {
   if (value === undefined || value === null) {
@@ -20,15 +24,14 @@ function _buildStockMap(items, transactions, initialStockOverrides = new Map()) 
     }
 
     const quantity = Number(transaction.quantity || 0);
-    if (transaction.type === 'DELIVERY') {
+    const normalizedType = normalizeTransactionType(transaction.type);
+    if (normalizedType === 'DELIVERY') {
       deliveredByItem.set(itemId, (deliveredByItem.get(itemId) || 0) + quantity);
-    } else if (transaction.type === 'ISSUE' ||
-        transaction.type === 'EMPLOYEE ISSUE' ||
-        transaction.type === 'CONSUMED') {
+    } else if (isStockOutTransaction(normalizedType)) {
       issuedByItem.set(itemId, (issuedByItem.get(itemId) || 0) + quantity);
-    } else if (transaction.type === 'RETURN') {
+    } else if (normalizedType === 'RETURN') {
       returnedByItem.set(itemId, (returnedByItem.get(itemId) || 0) + quantity);
-    } else if (transaction.type === 'NEW') {
+    } else if (normalizedType === 'NEW') {
       newByItem.set(itemId, (newByItem.get(itemId) || 0) + quantity);
     }
   }

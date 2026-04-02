@@ -2,48 +2,9 @@ const express = require('express');
 const { ID_COLUMN, fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, uniqueIds } = require('../lib/db');
 const checkPermission = require('../middlewares/checkPermission');
 const { recalculateInventoryStocks } = require('../lib/stock');
+const { VALID_TRANSACTION_TYPES, normalizeTransactionType } = require('../lib/transactionType');
 
 const router = express.Router();
-const DIRECT_TRANSACTION_TYPES = [
-  'DELIVERY',
-  'ISSUE',
-  'RETURN',
-  'NEW',
-  'EMPLOYEE ISSUE',
-  'CONSUMED',
-  'SITE TRANSFER',
-];
-
-function normalizeTransactionType(value) {
-  const raw = String(value || '').trim();
-  if (!raw) {
-    return '';
-  }
-
-  const upper = raw.toUpperCase();
-  const compact = upper.replace(/[^A-Z]/g, '');
-
-  switch (compact) {
-    case 'ISSUE':
-      return 'ISSUE';
-    case 'RETURN':
-      return 'RETURN';
-    case 'NEW':
-      return 'NEW';
-    case 'DELIVERY':
-      return 'DELIVERY';
-    case 'EMPLOYEEISSUE':
-    case 'EMPLOYEE':
-      return 'EMPLOYEE ISSUE';
-    case 'CONSUMABLE':
-    case 'CONSUMED':
-      return 'CONSUMED';
-    case 'SITETRANSFER':
-      return 'SITE TRANSFER';
-    default:
-      return upper;
-  }
-}
 
 const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
 
@@ -359,7 +320,7 @@ function validateTransactionInput(body) {
     return 'Invalid input data';
   }
 
-  if (!DIRECT_TRANSACTION_TYPES.includes(normalizedType)) {
+  if (!VALID_TRANSACTION_TYPES.includes(normalizedType)) {
     return 'Invalid transaction type';
   }
 

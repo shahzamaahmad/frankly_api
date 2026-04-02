@@ -13,6 +13,7 @@ const {
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
 const { recalculateInventoryStocks } = require('../lib/stock');
+const { normalizeTransactionType } = require('../lib/transactionType');
 
 const router = express.Router();
 
@@ -36,10 +37,6 @@ const upload = multer({
 });
 
 const getDubaiTime = () => new Date(new Date().getTime() + 4 * 60 * 60 * 1000);
-
-function normalizeTransactionType(value) {
-  return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
-}
 
 function normalizeSiteLabel(site) {
   const siteCode = String(site?.siteCode || '').trim().toUpperCase();
