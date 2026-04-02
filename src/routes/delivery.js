@@ -50,6 +50,27 @@ async function resolveWarehouseSiteId() {
   return warehouseSite ? String(warehouseSite.id || warehouseSite._id || '') : null;
 }
 
+function getTransactionEmployeeId(transaction) {
+  return transaction.employeeId || transaction.employee_id || transaction.employee || null;
+}
+
+async function fetchUserSummaries(ids) {
+  const userIds = uniqueIds(ids);
+  if (!userIds.length) {
+    return new Map();
+  }
+
+  const users = await fetchMany('users', {
+    filters: [{ column: ID_COLUMN, operator: 'in', value: userIds }],
+  });
+
+  return indexById(users.map((user) => ({
+    id: user.id || user._id,
+    username: user.username,
+    fullName: user.fullName,
+  })));
+}
+
 function readItemId(item) {
   if (!item) {
     return null;
@@ -235,6 +256,8 @@ async function getDeliveryColumnSupport() {
     hasColumn('transactions', 'deliveryRemarks'),
     hasColumn('transactions', 'toSiteId'),
     hasColumn('transactions', 'proofImage'),
+    hasColumn('transactions', 'employeeId'),
+    hasColumn('transactions', 'employee'),
   ]);
 
   return {
@@ -248,6 +271,8 @@ async function getDeliveryColumnSupport() {
     deliveryRemarks: columns[7],
     toSiteId: columns[8],
     proofImage: columns[9],
+    employeeId: columns[10],
+    employee: columns[11],
   };
 }
 
@@ -265,6 +290,7 @@ async function buildDeliveryTransactionPayloads({
   const deliveryDateIso =
     normalizeIsoDate(body.deliveryDate) || getDubaiTime().toISOString();
   const amount = parseAmount(body.amount);
+  const receivedByEmployeeId = body.employee || body.receivedByEmployeeId || null;
   const sharedFields = {
     type: 'DELIVERY',
     eventTimestamp: deliveryDateIso,
@@ -272,7 +298,12 @@ async function buildDeliveryTransactionPayloads({
     ...(columnSupport.deliveryDate ? { deliveryDate: deliveryDateIso } : {}),
     ...(columnSupport.seller ? { seller: body.seller?.trim() || null } : {}),
     ...(columnSupport.amount ? { amount } : {}),
-    ...(columnSupport.receivedBy
+    ...(columnSupport.employeeId && receivedByEmployeeId
+      ? { employeeId: receivedByEmployeeId }
+      : columnSupport.employee && receivedByEmployeeId
+          ? { employee: receivedByEmployeeId }
+          : {}),
+    ...(!receivedByEmployeeId && columnSupport.receivedBy
       ? { receivedBy: body.receivedBy?.trim() || null }
       : {}),
     ...(columnSupport.invoiceImage
@@ -337,12 +368,14 @@ async function populateDeliveriesFromRows(rows) {
   }
 
   const inventoryIds = uniqueIds(rows.map((row) => row.inventoryId));
-  const [inventory] = await Promise.all([
+  const employeeIds = uniqueIds(rows.map((row) => getTransactionEmployeeId(row)));
+  const [inventory, employees] = await Promise.all([
     inventoryIds.length
       ? fetchMany('inventory', {
           filters: [{ column: ID_COLUMN, operator: 'in', value: inventoryIds }],
         })
       : [],
+    fetchUserSummaries(employeeIds),
   ]);
 
   const inventoryMap = indexById(
@@ -365,6 +398,10 @@ async function populateDeliveriesFromRows(rows) {
       (a, b) => transactionTimestampValue(a) - transactionTimestampValue(b),
     );
     const head = sortedRows[0];
+    const receivedByEmployeeId = getTransactionEmployeeId(head);
+    const receivedByEmployee = receivedByEmployeeId
+      ? employees.get(String(receivedByEmployeeId))
+      : null;
 
     return {
       id: groupId,
@@ -372,7 +409,12 @@ async function populateDeliveriesFromRows(rows) {
       deliveryDate: head.deliveryDate || head.eventTimestamp || null,
       seller: head.seller || null,
       amount: head.amount ?? null,
-      receivedBy: head.receivedBy || null,
+      receivedBy:
+        receivedByEmployee?.fullName ||
+        receivedByEmployee?.username ||
+        head.receivedBy ||
+        null,
+      employee: receivedByEmployeeId || null,
       remarks: head.deliveryRemarks || head.notes || null,
       invoiceImage: head.invoiceImage || null,
       proofImage: head.proofImage || null,
@@ -548,6 +590,10 @@ router.put(
         body: {
           seller: body.seller ?? existingRows[0].seller,
           amount: body.amount ?? existingRows[0].amount,
+          employee:
+            body.employee ??
+            body.receivedByEmployeeId ??
+            getTransactionEmployeeId(existingRows[0]),
           receivedBy: body.receivedBy ?? existingRows[0].receivedBy,
           deliveryDate:
             body.deliveryDate ||
