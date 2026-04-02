@@ -250,10 +250,9 @@ async function getDeliveryColumnSupport() {
     hasColumn('transactions', 'deliveryDate'),
     hasColumn('transactions', 'seller'),
     hasColumn('transactions', 'amount'),
-    hasColumn('transactions', 'receivedBy'),
     hasColumn('transactions', 'invoiceImage'),
     hasColumn('transactions', 'invoiceNumber'),
-    hasColumn('transactions', 'deliveryRemarks'),
+    hasColumn('transactions', 'notes'),
     hasColumn('transactions', 'toSiteId'),
     hasColumn('transactions', 'proofImage'),
     hasColumn('transactions', 'employeeId'),
@@ -265,14 +264,13 @@ async function getDeliveryColumnSupport() {
     deliveryDate: columns[1],
     seller: columns[2],
     amount: columns[3],
-    receivedBy: columns[4],
-    invoiceImage: columns[5],
-    invoiceNumber: columns[6],
-    deliveryRemarks: columns[7],
-    toSiteId: columns[8],
-    proofImage: columns[9],
-    employeeId: columns[10],
-    employee: columns[11],
+    invoiceImage: columns[4],
+    invoiceNumber: columns[5],
+    notes: columns[6],
+    toSiteId: columns[7],
+    proofImage: columns[8],
+    employeeId: columns[9],
+    employee: columns[10],
   };
 }
 
@@ -303,17 +301,14 @@ async function buildDeliveryTransactionPayloads({
       : columnSupport.employee && receivedByEmployeeId
           ? { employee: receivedByEmployeeId }
           : {}),
-    ...(!receivedByEmployeeId && columnSupport.receivedBy
-      ? { receivedBy: body.receivedBy?.trim() || null }
-      : {}),
     ...(columnSupport.invoiceImage
       ? { invoiceImage: body.invoiceImage || null }
       : {}),
     ...(columnSupport.invoiceNumber
       ? { invoiceNumber: body.invoiceNumber?.trim() || null }
       : {}),
-    ...(columnSupport.deliveryRemarks
-      ? { deliveryRemarks: body.remarks?.trim() || null }
+    ...(columnSupport.notes
+      ? { notes: body.remarks?.trim() || null }
       : {}),
     ...(columnSupport.proofImage
       ? { proofImage: body.proofImage || null }
@@ -412,10 +407,9 @@ async function populateDeliveriesFromRows(rows) {
       receivedBy:
         receivedByEmployee?.fullName ||
         receivedByEmployee?.username ||
-        head.receivedBy ||
         null,
       employee: receivedByEmployeeId || null,
-      remarks: head.deliveryRemarks || head.notes || null,
+      remarks: head.notes || null,
       invoiceImage: head.invoiceImage || null,
       proofImage: head.proofImage || null,
       invoiceNumber: head.invoiceNumber || null,
@@ -594,14 +588,12 @@ router.put(
             body.employee ??
             body.receivedByEmployeeId ??
             getTransactionEmployeeId(existingRows[0]),
-          receivedBy: body.receivedBy ?? existingRows[0].receivedBy,
           deliveryDate:
             body.deliveryDate ||
             existingRows[0].deliveryDate ||
             existingRows[0].eventTimestamp,
           remarks:
             body.remarks ??
-            existingRows[0].deliveryRemarks ??
             existingRows[0].notes,
           invoiceImage:
             body.invoiceImage !== undefined
