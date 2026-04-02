@@ -1,26 +1,45 @@
 const express = require('express');
 const multer = require('multer');
-const { fetchById, fetchMany, deleteRow, hasColumn, indexById, insertRow, uniqueIds, updateRow } = require('../lib/db');
-const { getSupabaseAdmin } = require('../lib/supabase');
+const {
+  ID_COLUMN,
+  deleteRow,
+  fetchById,
+  fetchMany,
+  hasColumn,
+  indexById,
+  insertRow,
+  uniqueIds,
+} = require('../lib/db');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
 const { recalculateInventoryStocks } = require('../lib/stock');
 
 const router = express.Router();
 
-const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
-
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp', 'application/pdf'];
+    const allowed = [
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'image/gif',
+      'image/webp',
+      'application/pdf',
+    ];
     if (allowed.includes(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file type'));
     }
-  }
+  },
 });
+
+const getDubaiTime = () => new Date(new Date().getTime() + 4 * 60 * 60 * 1000);
+
+function normalizeTransactionType(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+}
 
 function readItemId(item) {
   if (!item) {
@@ -60,6 +79,27 @@ function toBoolean(value) {
   return false;
 }
 
+function parseAmount(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function normalizeIsoDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString();
+}
+
 function normalizeItems(items) {
   const source = typeof items === 'string' ? JSON.parse(items) : items;
   if (!Array.isArray(source)) {
@@ -75,14 +115,33 @@ function normalizeItems(items) {
       const nestedItemSku = typeof itemNameValue === 'object'
         ? (itemNameValue.sku || '')
         : '';
+      const nestedItemCategory = typeof itemNameValue === 'object'
+        ? (itemNameValue.category || '')
+        : '';
 
       return {
         inventoryId: readItemId(item),
         quantity: Number(item?.quantity || 0),
         siteId: readEntityId(item?.site) || readEntityId(item?.siteId) || null,
-        customItemName: (item?.customItemName || item?.itemNameText || item?.name || nestedItemName || '').trim(),
-        customItemSku: (item?.customItemSku || item?.sku || nestedItemSku || '').trim(),
-        customItemCategory: (item?.customItemCategory || item?.category || (typeof itemNameValue === 'object' ? itemNameValue.category : '') || '').trim(),
+        customItemName: (
+          item?.customItemName ||
+          item?.itemNameText ||
+          item?.name ||
+          nestedItemName ||
+          ''
+        ).trim(),
+        customItemSku: (
+          item?.customItemSku ||
+          item?.sku ||
+          nestedItemSku ||
+          ''
+        ).trim(),
+        customItemCategory: (
+          item?.customItemCategory ||
+          item?.category ||
+          nestedItemCategory ||
+          ''
+        ).trim(),
         isIssuedToSite: toBoolean(item?.isIssuedToSite),
         issuedAt: item?.issuedAt || null,
         issuedBy: (item?.issuedBy || '').trim(),
@@ -94,27 +153,41 @@ function normalizeItems(items) {
 async function uploadInvoice(req, body) {
   try {
     if (req.file) {
-      body.invoiceImage = await uploadBufferToCloudinary(req.file.buffer, req.file.originalname || 'invoice');
+      body.invoiceImage = await uploadBufferToCloudinary(
+        req.file.buffer,
+        req.file.originalname || 'invoice',
+      );
     } else if (body.invoiceBase64) {
       const buffer = Buffer.from(body.invoiceBase64, 'base64');
       body.invoiceImage = await uploadBufferToCloudinary(buffer, 'invoice');
     }
   } catch (error) {
     console.error('CDN upload failed:', error.message);
-    if (req.file) body.invoiceImage = req.file.buffer.toString('base64');
-    else if (body.invoiceBase64) body.invoiceImage = body.invoiceBase64;
+    if (req.file) {
+      body.invoiceImage = req.file.buffer.toString('base64');
+    } else if (body.invoiceBase64) {
+      body.invoiceImage = body.invoiceBase64;
+    }
   }
 }
 
 async function generateDeliveryId() {
+  const supportsDeliveryId = await hasColumn('transactions', 'deliveryId');
+  if (!supportsDeliveryId) {
+    throw new Error('transactions.delivery_id column is required');
+  }
+
   const now = getDubaiTime();
   const dd = String(now.getDate()).padStart(2, '0');
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const yyyy = now.getFullYear();
   const prefix = `DEL-${dd}${mm}${yyyy}-`;
 
-  const latest = await fetchMany('deliveries', {
-    filters: [{ column: 'deliveryId', operator: 'like', value: `${prefix}%` }],
+  const latest = await fetchMany('transactions', {
+    filters: [
+      { column: 'type', operator: 'eq', value: 'DELIVERY' },
+      { column: 'deliveryId', operator: 'like', value: `${prefix}%` },
+    ],
     orderBy: 'deliveryId',
     ascending: false,
     limit: 1,
@@ -131,296 +204,371 @@ async function generateDeliveryId() {
   return `${prefix}${String(nextNum).padStart(4, '0')}`;
 }
 
-async function fetchDeliveryItemsByDeliveryIds(deliveryIds) {
-  const ids = uniqueIds(deliveryIds);
-  if (!ids.length) {
-    return [];
-  }
-
-  const { data, error } = await getSupabaseAdmin()
-    .from('delivery_items')
-    .select('*')
-    .in('delivery_id', ids);
-
-  if (error) {
-    throw error;
-  }
-
-  return data || [];
+function transactionTimestampValue(transaction) {
+  const value =
+    transaction?.deliveryDate ||
+    transaction?.eventTimestamp ||
+    transaction?.timestamp ||
+    null;
+  const parsed = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function buildDeliveryItemKey(item) {
-  const inventoryId = item.inventoryId || item.inventory_id || null;
-  const siteId = item.siteId || item.site_id || null;
-  if (inventoryId) {
-    return `inventory:${inventoryId}|site:${siteId || ''}`;
-  }
-
-  const itemName = (item.customItemName || item.item_name || '').trim().toLowerCase();
-  const itemSku = (item.customItemSku || item.item_sku || '').trim().toLowerCase();
-  const itemCategory = (item.customItemCategory || item.item_category || '').trim().toLowerCase();
-  return `custom:${itemName}|sku:${itemSku}|category:${itemCategory}|site:${siteId || ''}`;
-}
-
-function deliveryItemRowNeedsUpdate(existingRow, nextItem) {
-  return (
-    Number(existingRow.quantity || 0) !== Number(nextItem.quantity || 0) ||
-    (existingRow.inventory_id || null) !== (nextItem.inventoryId || null) ||
-    (existingRow.site_id || null) !== (nextItem.siteId || null) ||
-    (existingRow.item_name || null) !== (nextItem.customItemName || null) ||
-    (existingRow.item_sku || null) !== (nextItem.customItemSku || null) ||
-    (existingRow.item_category || null) !== (nextItem.customItemCategory || null) ||
-    (existingRow.is_issued_to_site === true) !== (nextItem.isIssuedToSite === true) ||
-    (existingRow.issued_at || null) !== (nextItem.issuedAt || null) ||
-    (existingRow.issued_by || null) !== (nextItem.issuedBy || null)
+function transactionIdentityValue(transaction) {
+  return String(
+    transaction?.transactionId ||
+      transaction?.deliveryId ||
+      transaction?.id ||
+      transaction?._id ||
+      '',
   );
 }
 
-async function syncDeliveryItems(deliveryId, items) {
-  const client = getSupabaseAdmin();
-  const existingRows = await fetchDeliveryItemsByDeliveryIds([deliveryId]);
-
-  const supportsSiteId = await hasColumn('deliveryItems', 'siteId');
-  if (!supportsSiteId && items.some((item) => item.siteId)) {
-    throw new Error('delivery_items.site_id column is required to save site-specific delivery lines');
-  }
-  const supportsCustomItemName = await hasColumn('deliveryItems', 'itemName');
-  const supportsCustomItemSku = await hasColumn('deliveryItems', 'itemSku');
-  const supportsCustomItemCategory = await hasColumn('deliveryItems', 'itemCategory');
-  const supportsIssuedStatus = await hasColumn('deliveryItems', 'isIssuedToSite');
-  const supportsIssuedAt = await hasColumn('deliveryItems', 'issuedAt');
-  const supportsIssuedBy = await hasColumn('deliveryItems', 'issuedBy');
-  const hasCustomItems = items.some((item) => !item.inventoryId && item.customItemName);
-  if (!supportsCustomItemName && hasCustomItems) {
-    throw new Error('delivery_items.item_name column is required to save custom delivery lines');
-  }
-  if (!supportsCustomItemCategory && items.some((item) => item.customItemCategory)) {
-    throw new Error('delivery_items.item_category column is required to save custom delivery item categories');
-  }
-  if (!supportsIssuedStatus && items.some((item) => item.isIssuedToSite)) {
-    throw new Error('delivery_items.is_issued_to_site column is required to save issued delivery status');
-  }
-  if (!supportsIssuedAt && items.some((item) => item.issuedAt)) {
-    throw new Error('delivery_items.issued_at column is required to save issued delivery timestamps');
-  }
-  if (!supportsIssuedBy && items.some((item) => item.issuedBy)) {
-    throw new Error('delivery_items.issued_by column is required to save issued-by details');
+function isLaterTransaction(candidate, currentTimestamp, excludedIds) {
+  const candidateTimestamp = transactionTimestampValue(candidate);
+  if (candidateTimestamp !== currentTimestamp) {
+    return candidateTimestamp > currentTimestamp;
   }
 
-  const toPayload = (item) => {
-    const entry = {
-      delivery_id: deliveryId,
-      inventory_id: item.inventoryId || null,
-      quantity: item.quantity,
-    };
-
-    if (supportsSiteId) {
-      entry.site_id = item.siteId || null;
-    }
-    if (supportsCustomItemName) {
-      entry.item_name = item.customItemName || null;
-    }
-    if (supportsCustomItemSku) {
-      entry.item_sku = item.customItemSku || null;
-    }
-    if (supportsCustomItemCategory) {
-      entry.item_category = item.customItemCategory || null;
-    }
-    if (supportsIssuedStatus) {
-      entry.is_issued_to_site = item.isIssuedToSite === true;
-    }
-    if (supportsIssuedAt) {
-      entry.issued_at = item.issuedAt || null;
-    }
-    if (supportsIssuedBy) {
-      entry.issued_by = item.issuedBy || null;
-    }
-    return entry;
-  };
-
-  const existingByKey = new Map();
-  for (const row of existingRows) {
-    const key = buildDeliveryItemKey(row);
-    const currentRows = existingByKey.get(key) || [];
-    currentRows.push(row);
-    existingByKey.set(key, currentRows);
+  const candidateId = String(candidate.id || candidate._id || '');
+  if (excludedIds.has(candidateId)) {
+    return false;
   }
 
-  const nextKeys = new Set(items.map(buildDeliveryItemKey));
-  const rowsToDelete = existingRows.filter((row) => !nextKeys.has(buildDeliveryItemKey(row)));
-  if (rowsToDelete.length) {
-    const deleteIds = rowsToDelete
-      .map((row) => row.id || row._id)
-      .filter(Boolean);
-    if (deleteIds.length) {
-      const { error: deleteError } = await client
-        .from('delivery_items')
-        .delete()
-        .in('id', deleteIds);
-      if (deleteError) {
-        throw deleteError;
-      }
-    }
-  }
-
-  const rowsToInsert = [];
-  const rowsToUpdate = [];
-
-  for (const item of items) {
-    const key = buildDeliveryItemKey(item);
-    const matchingRows = existingByKey.get(key) || [];
-    const existingRow = matchingRows.shift();
-    existingByKey.set(key, matchingRows);
-
-    if (!existingRow) {
-      rowsToInsert.push(toPayload(item));
-      continue;
-    }
-
-    if (deliveryItemRowNeedsUpdate(existingRow, item)) {
-      rowsToUpdate.push({
-        id: existingRow.id || existingRow._id,
-        payload: toPayload(item),
-      });
-    }
-  }
-
-  const leftoverRows = Array.from(existingByKey.values()).flat();
-  if (leftoverRows.length) {
-    const extraIds = leftoverRows
-      .map((row) => row.id || row._id)
-      .filter(Boolean);
-    if (extraIds.length) {
-      const { error: deleteExtraError } = await client
-        .from('delivery_items')
-        .delete()
-        .in('id', extraIds);
-      if (deleteExtraError) {
-        throw deleteExtraError;
-      }
-    }
-  }
-
-  if (rowsToInsert.length) {
-    const { error: insertError } = await client.from('delivery_items').insert(rowsToInsert);
-    if (insertError) {
-      throw insertError;
-    }
-  }
-
-  for (const row of rowsToUpdate) {
-    const { error: updateError } = await client
-      .from('delivery_items')
-      .update(row.payload)
-      .eq('id', row.id);
-    if (updateError) {
-      throw updateError;
-    }
-  }
+  return transactionIdentityValue(candidate) > Array.from(excludedIds).sort()[0];
 }
 
-async function populateDeliveries(deliveries) {
-  if (!deliveries.length) {
+function inventoryStockSignatureFromRows(rows) {
+  return rows
+    .filter((row) => row.inventoryId)
+    .map((row) => `${row.inventoryId}:${Number(row.quantity || 0)}`)
+    .sort();
+}
+
+function inventoryStockSignatureFromItems(items) {
+  return items
+    .filter((item) => item.inventoryId)
+    .map((item) => `${item.inventoryId}:${Number(item.quantity || 0)}`)
+    .sort();
+}
+
+async function hasLaterNonDeliveryMovement(itemIds, referenceTimestamp, excludedIds) {
+  const ids = uniqueIds(itemIds);
+  if (!ids.length) {
+    return false;
+  }
+
+  const relatedTransactions = await fetchMany('transactions', {
+    filters: [{ column: 'inventoryId', operator: 'in', value: ids }],
+  });
+
+  return relatedTransactions.some((transaction) => {
+    const transactionId = String(transaction.id || transaction._id || '');
+    if (excludedIds.has(transactionId)) {
+      return false;
+    }
+
+    if (normalizeTransactionType(transaction.type) === 'DELIVERY') {
+      return false;
+    }
+
+    return isLaterTransaction(transaction, referenceTimestamp, excludedIds);
+  });
+}
+
+async function getDeliveryColumnSupport() {
+  const columns = await Promise.all([
+    hasColumn('transactions', 'deliveryId'),
+    hasColumn('transactions', 'deliveryDate'),
+    hasColumn('transactions', 'seller'),
+    hasColumn('transactions', 'amount'),
+    hasColumn('transactions', 'receivedBy'),
+    hasColumn('transactions', 'invoiceImage'),
+    hasColumn('transactions', 'invoiceNumber'),
+    hasColumn('transactions', 'deliveryRemarks'),
+    hasColumn('transactions', 'customItemName'),
+    hasColumn('transactions', 'customItemSku'),
+    hasColumn('transactions', 'customItemCategory'),
+    hasColumn('transactions', 'isIssuedToSite'),
+    hasColumn('transactions', 'issuedAt'),
+    hasColumn('transactions', 'issuedBy'),
+  ]);
+
+  return {
+    deliveryId: columns[0],
+    deliveryDate: columns[1],
+    seller: columns[2],
+    amount: columns[3],
+    receivedBy: columns[4],
+    invoiceImage: columns[5],
+    invoiceNumber: columns[6],
+    deliveryRemarks: columns[7],
+    customItemName: columns[8],
+    customItemSku: columns[9],
+    customItemCategory: columns[10],
+    isIssuedToSite: columns[11],
+    issuedAt: columns[12],
+    issuedBy: columns[13],
+  };
+}
+
+async function buildDeliveryTransactionPayloads({
+  body,
+  items,
+  deliveryId,
+}) {
+  const columnSupport = await getDeliveryColumnSupport();
+  if (!columnSupport.deliveryId) {
+    throw new Error('transactions.delivery_id column is required');
+  }
+  if (items.some((item) => !item.inventoryId && item.customItemName) &&
+      !columnSupport.customItemName) {
+    throw new Error('transactions.custom_item_name column is required for custom delivery items');
+  }
+
+  const deliveryDateIso =
+    normalizeIsoDate(body.deliveryDate) || getDubaiTime().toISOString();
+  const amount = parseAmount(body.amount);
+  const sharedFields = {
+    type: 'DELIVERY',
+    eventTimestamp: deliveryDateIso,
+    deliveryId,
+    ...(columnSupport.deliveryDate ? { deliveryDate: deliveryDateIso } : {}),
+    ...(columnSupport.seller ? { seller: body.seller?.trim() || null } : {}),
+    ...(columnSupport.amount ? { amount } : {}),
+    ...(columnSupport.receivedBy
+      ? { receivedBy: body.receivedBy?.trim() || null }
+      : {}),
+    ...(columnSupport.invoiceImage
+      ? { invoiceImage: body.invoiceImage || null }
+      : {}),
+    ...(columnSupport.invoiceNumber
+      ? { invoiceNumber: body.invoiceNumber?.trim() || null }
+      : {}),
+    ...(columnSupport.deliveryRemarks
+      ? { deliveryRemarks: body.remarks?.trim() || null }
+      : {}),
+  };
+
+  return items.map((item, index) => ({
+    transactionId: `${deliveryId}-${String(index + 1).padStart(2, '0')}`,
+    ...sharedFields,
+    inventoryId: item.inventoryId || null,
+    siteId: item.siteId || null,
+    quantity: item.quantity,
+    ...(columnSupport.customItemName
+      ? { customItemName: item.customItemName || null }
+      : {}),
+    ...(columnSupport.customItemSku
+      ? { customItemSku: item.customItemSku || null }
+      : {}),
+    ...(columnSupport.customItemCategory
+      ? { customItemCategory: item.customItemCategory || null }
+      : {}),
+    ...(columnSupport.isIssuedToSite
+      ? { isIssuedToSite: item.isIssuedToSite === true }
+      : {}),
+    ...(columnSupport.issuedAt ? { issuedAt: item.issuedAt || null } : {}),
+    ...(columnSupport.issuedBy
+      ? { issuedBy: item.issuedBy || null }
+      : {}),
+  }));
+}
+
+async function fetchDeliveryRowsByDeliveryId(deliveryId) {
+  if (!deliveryId) {
     return [];
   }
 
-  const deliveryItems = await fetchDeliveryItemsByDeliveryIds(deliveries.map((delivery) => delivery.id || delivery._id));
-  const itemsByDeliveryId = new Map();
+  return fetchMany('transactions', {
+    filters: [
+      { column: 'type', operator: 'eq', value: 'DELIVERY' },
+      { column: 'deliveryId', operator: 'eq', value: deliveryId },
+    ],
+    orderBy: 'eventTimestamp',
+    ascending: true,
+  });
+}
 
-  for (const item of deliveryItems) {
-    const deliveryId = String(item.delivery_id);
-    const current = itemsByDeliveryId.get(deliveryId) || [];
-    current.push(item);
-    itemsByDeliveryId.set(deliveryId, current);
+async function resolveDeliveryRows(identifier) {
+  const byDeliveryId = await fetchDeliveryRowsByDeliveryId(identifier);
+  if (byDeliveryId.length) {
+    return byDeliveryId;
   }
 
-  const inventoryIds = uniqueIds(deliveryItems.map((item) => item.inventory_id));
-  const siteIds = uniqueIds(deliveryItems.map((item) => item.site_id));
-  const inventory = inventoryIds.length
-    ? await fetchMany('inventory', { filters: [{ column: 'id', operator: 'in', value: inventoryIds }] })
-    : [];
-  const sites = siteIds.length
-    ? await fetchMany('sites', { filters: [{ column: 'id', operator: 'in', value: siteIds }] })
-    : [];
-  const inventoryMap = indexById(inventory.map((item) => ({
-    id: item.id || item._id,
-    name: item.name,
-    sku: item.sku,
-  })));
-  const siteMap = indexById(sites.map((site) => ({
-    id: site.id || site._id,
-    siteName: site.siteName,
-    name: site.siteName || site.name,
-  })));
+  const row = await fetchById('transactions', identifier);
+  if (!row || normalizeTransactionType(row.type) !== 'DELIVERY') {
+    return [];
+  }
 
-  return deliveries.map((delivery) => {
-    const currentItems = itemsByDeliveryId.get(String(delivery.id || delivery._id)) || [];
+  if (row.deliveryId) {
+    return fetchDeliveryRowsByDeliveryId(row.deliveryId);
+  }
+
+  return [row];
+}
+
+async function populateDeliveriesFromRows(rows) {
+  if (!rows.length) {
+    return [];
+  }
+
+  const inventoryIds = uniqueIds(rows.map((row) => row.inventoryId));
+  const siteIds = uniqueIds(rows.map((row) => row.siteId));
+  const [inventory, sites] = await Promise.all([
+    inventoryIds.length
+      ? fetchMany('inventory', {
+          filters: [{ column: ID_COLUMN, operator: 'in', value: inventoryIds }],
+        })
+      : [],
+    siteIds.length
+      ? fetchMany('sites', {
+          filters: [{ column: ID_COLUMN, operator: 'in', value: siteIds }],
+        })
+      : [],
+  ]);
+
+  const inventoryMap = indexById(
+    inventory.map((item) => ({
+      id: item.id || item._id,
+      name: item.name,
+      sku: item.sku,
+    })),
+  );
+  const siteMap = indexById(
+    sites.map((site) => ({
+      id: site.id || site._id,
+      siteName: site.siteName,
+      name: site.siteName || site.name,
+    })),
+  );
+
+  const grouped = new Map();
+  for (const row of rows) {
+    const groupId = String(row.deliveryId || row.id || row._id);
+    const current = grouped.get(groupId) || [];
+    current.push(row);
+    grouped.set(groupId, current);
+  }
+
+  const deliveries = Array.from(grouped.entries()).map(([groupId, groupRows]) => {
+    const sortedRows = [...groupRows].sort(
+      (a, b) => transactionTimestampValue(a) - transactionTimestampValue(b),
+    );
+    const head = sortedRows[0];
+
     return {
-      ...delivery,
-      items: currentItems.map((item) => ({
-        itemName: item.inventory_id
-          ? (inventoryMap.get(String(item.inventory_id)) || item.inventory_id)
+      id: groupId,
+      deliveryId: head.deliveryId || groupId,
+      deliveryDate: head.deliveryDate || head.eventTimestamp || null,
+      seller: head.seller || null,
+      amount: head.amount ?? null,
+      receivedBy: head.receivedBy || null,
+      remarks: head.deliveryRemarks || head.notes || null,
+      invoiceImage: head.invoiceImage || null,
+      invoiceNumber: head.invoiceNumber || null,
+      items: sortedRows.map((row) => ({
+        itemName: row.inventoryId
+          ? (inventoryMap.get(String(row.inventoryId)) || row.inventoryId)
           : {
-              name: item.item_name || 'Custom Item',
-              sku: item.item_sku || '',
-              category: item.item_category || '',
+              name: row.customItemName || 'Custom Item',
+              sku: row.customItemSku || '',
+              category: row.customItemCategory || '',
             },
-        quantity: Number(item.quantity || 0),
-        site: item.site_id ? (siteMap.get(String(item.site_id)) || item.site_id) : null,
-        customItemCategory: item.item_category || null,
-        isIssuedToSite: item.is_issued_to_site === true,
-        issuedAt: item.issued_at || null,
-        issuedBy: item.issued_by || null,
+        quantity: Number(row.quantity || 0),
+        site: row.siteId ? (siteMap.get(String(row.siteId)) || row.siteId) : null,
+        customItemCategory: row.customItemCategory || null,
+        isIssuedToSite: row.isIssuedToSite === true,
+        issuedAt: row.issuedAt || null,
+        issuedBy: row.issuedBy || null,
       })),
     };
   });
-}
 
-async function populateDelivery(delivery) {
-  const populated = await populateDeliveries(delivery ? [delivery] : []);
-  return populated[0] || null;
-}
-
-router.post('/', checkPermission('addDeliveries'), (req, res, next) => {
-  upload.single('invoice')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
-    next();
+  deliveries.sort((a, b) => {
+    const aTime = a.deliveryDate ? new Date(a.deliveryDate).getTime() : 0;
+    const bTime = b.deliveryDate ? new Date(b.deliveryDate).getTime() : 0;
+    return bTime - aTime;
   });
-}, async (req, res) => {
-  try {
-    const body = { ...req.body };
 
-    if (body.deliveryDate && typeof body.deliveryDate === 'string') {
-      body.deliveryDate = new Date(body.deliveryDate).toISOString();
-    }
+  return deliveries;
+}
 
-    await uploadInvoice(req, body);
+async function populateDeliveryFromRows(rows) {
+  const deliveries = await populateDeliveriesFromRows(rows);
+  return deliveries[0] || null;
+}
 
-    const items = normalizeItems(body.items);
-    body.amount = body.amount !== undefined && body.amount !== '' ? Number(body.amount) : body.amount;
-    body.deliveryId = await generateDeliveryId();
-
-    delete body.items;
-    delete body.invoiceBase64;
-    delete body.invoiceContentType;
-    delete body.invoiceFilename;
-
-    const delivery = await insertRow('deliveries', body);
-    await syncDeliveryItems(delivery.id || delivery._id, items);
-    await recalculateInventoryStocks(items.map((item) => item.inventoryId));
-
-    const populated = await populateDelivery(delivery);
-    res.status(201).json(populated);
-  } catch (err) {
-    console.error('Create delivery error:', err);
-    res.status(400).json({ error: err.message || 'Failed to create delivery' });
+function normalizeBody(body) {
+  const nextBody = { ...body };
+  if (nextBody.deliveryDate && typeof nextBody.deliveryDate === 'string') {
+    nextBody.deliveryDate = normalizeIsoDate(nextBody.deliveryDate);
   }
-});
+  if (typeof nextBody.amount !== 'undefined' && nextBody.amount !== '') {
+    nextBody.amount = parseAmount(nextBody.amount);
+  }
+  if (typeof nextBody.invoiceImage === 'string' && nextBody.invoiceImage === '') {
+    nextBody.invoiceImage = null;
+  }
+  return nextBody;
+}
+
+async function insertDeliveryTransactions({ body, items, deliveryId }) {
+  const payloads = await buildDeliveryTransactionPayloads({
+    body,
+    items,
+    deliveryId,
+  });
+  const createdRows = [];
+  for (const payload of payloads) {
+    createdRows.push(await insertRow('transactions', payload));
+  }
+  return createdRows;
+}
+
+router.post(
+  '/',
+  checkPermission('addDeliveries'),
+  (req, res, next) => {
+    upload.single('invoice')(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const body = normalizeBody({ ...req.body });
+      await uploadInvoice(req, body);
+      const items = normalizeItems(body.items);
+      if (!items.length) {
+        return res.status(400).json({ error: 'Delivery must have at least one item' });
+      }
+
+      const deliveryId = await generateDeliveryId();
+      const createdRows = await insertDeliveryTransactions({
+        body,
+        items,
+        deliveryId,
+      });
+      await recalculateInventoryStocks(items.map((item) => item.inventoryId));
+
+      const populated = await populateDeliveryFromRows(createdRows);
+      res.status(201).json(populated);
+    } catch (err) {
+      console.error('Create delivery error:', err);
+      res.status(400).json({ error: err.message || 'Failed to create delivery' });
+    }
+  },
+);
 
 router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
   try {
-    const deliveries = await fetchMany('deliveries', { orderBy: 'createdAt', ascending: false });
-    res.json(await populateDeliveries(deliveries));
+    const rows = await fetchMany('transactions', {
+      filters: [{ column: 'type', operator: 'eq', value: 'DELIVERY' }],
+      orderBy: 'eventTimestamp',
+      ascending: false,
+    });
+    res.json(await populateDeliveriesFromRows(rows));
   } catch (err) {
     console.error('Get deliveries error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -429,83 +577,142 @@ router.get('/', checkPermission('viewDeliveries'), async (req, res) => {
 
 router.get('/:id', checkPermission('viewDeliveries'), async (req, res) => {
   try {
-    const delivery = await fetchById('deliveries', req.params.id);
-    if (!delivery) return res.status(404).json({ error: 'Delivery not found' });
-    res.json(await populateDelivery(delivery));
+    const rows = await resolveDeliveryRows(req.params.id);
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Delivery not found' });
+    }
+    res.json(await populateDeliveryFromRows(rows));
   } catch (err) {
     console.error('Get delivery error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.put('/:id', checkPermission('editDeliveries'), (req, res, next) => {
-  upload.single('invoice')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
-    next();
-  });
-}, async (req, res) => {
-  try {
-    const body = { ...req.body };
-    const existingDelivery = await populateDelivery(await fetchById('deliveries', req.params.id));
-    if (!existingDelivery) return res.status(404).json({ error: 'Delivery not found' });
+router.put(
+  '/:id',
+  checkPermission('editDeliveries'),
+  (req, res, next) => {
+    upload.single('invoice')(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const existingRows = await resolveDeliveryRows(req.params.id);
+      if (!existingRows.length) {
+        return res.status(404).json({ error: 'Delivery not found' });
+      }
 
-    await uploadInvoice(req, body);
+      const body = normalizeBody({ ...req.body });
+      await uploadInvoice(req, body);
+      const items = normalizeItems(body.items);
+      if (!items.length) {
+        return res.status(400).json({ error: 'Delivery must have at least one item' });
+      }
 
-    if (body.deliveryDate && typeof body.deliveryDate === 'string') {
-      body.deliveryDate = new Date(body.deliveryDate).toISOString();
+      const existingInventorySignature = inventoryStockSignatureFromRows(existingRows);
+      const nextInventorySignature = inventoryStockSignatureFromItems(items);
+      const inventoryRowsChanged =
+        existingInventorySignature.length !== nextInventorySignature.length ||
+        existingInventorySignature.some((value, index) => value !== nextInventorySignature[index]);
+
+      const existingIds = new Set(
+        existingRows.map((row) => String(row.id || row._id || '')),
+      );
+      const deliveryTimestamp = transactionTimestampValue(existingRows[0]);
+      const affectedItemIds = uniqueIds([
+        ...existingRows.map((row) => row.inventoryId),
+        ...items.map((item) => item.inventoryId),
+      ]);
+
+      if (
+        inventoryRowsChanged &&
+        await hasLaterNonDeliveryMovement(
+          affectedItemIds,
+          deliveryTimestamp,
+          existingIds,
+        )
+      ) {
+        return res.status(409).json({
+          error:
+            'Cannot change delivery items because newer stock movement exists for one or more delivered items.',
+        });
+      }
+
+      const deliveryId = existingRows[0].deliveryId || req.params.id;
+      for (const row of existingRows) {
+        await deleteRow('transactions', row.id || row._id);
+      }
+
+      const createdRows = await insertDeliveryTransactions({
+        body: {
+          seller: body.seller ?? existingRows[0].seller,
+          amount: body.amount ?? existingRows[0].amount,
+          receivedBy: body.receivedBy ?? existingRows[0].receivedBy,
+          deliveryDate:
+            body.deliveryDate ||
+            existingRows[0].deliveryDate ||
+            existingRows[0].eventTimestamp,
+          remarks:
+            body.remarks ??
+            existingRows[0].deliveryRemarks ??
+            existingRows[0].notes,
+          invoiceImage:
+            body.invoiceImage !== undefined
+              ? body.invoiceImage
+              : existingRows[0].invoiceImage,
+          invoiceNumber:
+            body.invoiceNumber ?? existingRows[0].invoiceNumber,
+        },
+        items,
+        deliveryId,
+      });
+
+      await recalculateInventoryStocks(affectedItemIds);
+      res.json(await populateDeliveryFromRows(createdRows));
+    } catch (err) {
+      console.error('Update delivery error:', err);
+      res.status(400).json({ error: err.message || 'Failed to update delivery' });
     }
-
-    const items = body.items !== undefined ? normalizeItems(body.items) : null;
-
-    if (body.amount !== undefined && body.amount !== '') {
-      body.amount = Number(body.amount);
-    }
-
-    if (typeof body.invoiceImage === 'string' && body.invoiceImage === '') {
-      body.invoiceImage = null;
-    }
-
-    delete body.items;
-    delete body.invoiceBase64;
-    delete body.invoiceContentType;
-    delete body.invoiceFilename;
-
-    const updated = await updateRow('deliveries', req.params.id, body);
-    if (items) {
-      await syncDeliveryItems(req.params.id, items);
-    }
-
-    const affectedItems = [
-      ...((existingDelivery.items || []).map((item) => readItemId(item))),
-      ...((items || []).map((item) => item.inventoryId)),
-    ];
-
-    await recalculateInventoryStocks(affectedItems);
-
-    const populated = await populateDelivery(updated);
-    res.json(populated);
-  } catch (err) {
-    console.error('Update delivery error:', err);
-    res.status(400).json({ error: err.message || 'Failed to update delivery' });
-  }
-});
+  },
+);
 
 router.delete('/:id', checkPermission('deleteDeliveries'), async (req, res) => {
   try {
-    const delivery = await populateDelivery(await fetchById('deliveries', req.params.id));
-    if (!delivery) {
+    const existingRows = await resolveDeliveryRows(req.params.id);
+    if (!existingRows.length) {
       return res.status(404).json({ error: 'Delivery not found' });
     }
 
-    const affectedItems = (delivery.items || []).map((item) => readItemId(item));
+    const existingIds = new Set(
+      existingRows.map((row) => String(row.id || row._id || '')),
+    );
+    const affectedItemIds = uniqueIds(existingRows.map((row) => row.inventoryId));
+    const deliveryTimestamp = transactionTimestampValue(existingRows[0]);
 
-    await syncDeliveryItems(req.params.id, []);
-    await deleteRow('deliveries', req.params.id);
-    await recalculateInventoryStocks(affectedItems);
+    if (
+      await hasLaterNonDeliveryMovement(
+        affectedItemIds,
+        deliveryTimestamp,
+        existingIds,
+      )
+    ) {
+      return res.status(409).json({
+        error:
+          'Cannot delete this delivery because newer stock movement exists for one or more delivered items.',
+      });
+    }
+
+    for (const row of existingRows) {
+      await deleteRow('transactions', row.id || row._id);
+    }
+
+    await recalculateInventoryStocks(affectedItemIds);
     res.json({ message: 'Deleted' });
   } catch (err) {
     console.error('Delete delivery error:', err);
-    res.status(400).json({ error: 'Failed to delete delivery' });
+    res.status(400).json({ error: err.message || 'Failed to delete delivery' });
   }
 });
 

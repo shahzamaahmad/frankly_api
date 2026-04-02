@@ -5,6 +5,7 @@ const { recalculateInventoryStocks } = require('../lib/stock');
 
 const router = express.Router();
 const DIRECT_TRANSACTION_TYPES = [
+  'DELIVERY',
   'ISSUE',
   'RETURN',
   'NEW',
@@ -28,6 +29,8 @@ function normalizeTransactionType(value) {
       return 'RETURN';
     case 'NEW':
       return 'NEW';
+    case 'DELIVERY':
+      return 'DELIVERY';
     case 'EMPLOYEEISSUE':
     case 'EMPLOYEE':
       return 'EMPLOYEE ISSUE';
@@ -249,6 +252,10 @@ function validateTransactionInput(body) {
     return 'Site is required for consumed transactions';
   }
 
+  if (normalizedType === 'DELIVERY' && !body?.item) {
+    return 'Item is required for delivery transactions';
+  }
+
   if (normalizedType === 'RETURN' && !body?.site && !body?.employee) {
     return 'Site or employee is required for return transactions';
   }
@@ -326,6 +333,9 @@ async function getDeleteBlockReason(transaction) {
 router.get('/', checkPermission('viewTransactions'), async (req, res) => {
   try {
     const filters = [];
+    const includeDelivery = String(req.query.includeDelivery || '')
+      .trim()
+      .toLowerCase() === 'true';
     if (req.query.site && typeof req.query.site === 'string') filters.push({ column: 'siteId', operator: 'eq', value: req.query.site });
     if (req.query.item && typeof req.query.item === 'string') filters.push({ column: 'inventoryId', operator: 'eq', value: req.query.item });
     if (req.query.employee && typeof req.query.employee === 'string') {
@@ -344,7 +354,13 @@ router.get('/', checkPermission('viewTransactions'), async (req, res) => {
       ascending: false,
     });
 
-    res.json(await populateTransactions(transactions));
+    const visibleTransactions = includeDelivery
+      ? transactions
+      : transactions.filter(
+        (transaction) => normalizeTransactionType(transaction.type) !== 'DELIVERY',
+      );
+
+    res.json(await populateTransactions(visibleTransactions));
   } catch (err) {
     console.error('Get transactions error:', err);
     res.status(500).json({ error: 'Internal server error' });

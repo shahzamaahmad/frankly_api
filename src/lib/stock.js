@@ -1,5 +1,4 @@
 const { fetchMany, updateRow, uniqueIds } = require('./db');
-const { getSupabaseAdmin } = require('./supabase');
 
 function _toItemId(value) {
   if (value === undefined || value === null) {
@@ -8,25 +7,7 @@ function _toItemId(value) {
   return String(value);
 }
 
-async function _fetchDeliveryItems(itemIds) {
-  let query = getSupabaseAdmin()
-    .from('delivery_items')
-    .select('inventory_id, quantity');
-
-  if (itemIds.length) {
-    query = query.in('inventory_id', itemIds);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    throw error;
-  }
-
-  return data || [];
-}
-
-function _buildStockMap(items, transactions, deliveryItems, initialStockOverrides = new Map()) {
+function _buildStockMap(items, transactions, initialStockOverrides = new Map()) {
   const issuedByItem = new Map();
   const returnedByItem = new Map();
   const newByItem = new Map();
@@ -39,7 +20,9 @@ function _buildStockMap(items, transactions, deliveryItems, initialStockOverride
     }
 
     const quantity = Number(transaction.quantity || 0);
-    if (transaction.type === 'ISSUE' ||
+    if (transaction.type === 'DELIVERY') {
+      deliveredByItem.set(itemId, (deliveredByItem.get(itemId) || 0) + quantity);
+    } else if (transaction.type === 'ISSUE' ||
         transaction.type === 'EMPLOYEE ISSUE' ||
         transaction.type === 'CONSUMED') {
       issuedByItem.set(itemId, (issuedByItem.get(itemId) || 0) + quantity);
@@ -48,18 +31,6 @@ function _buildStockMap(items, transactions, deliveryItems, initialStockOverride
     } else if (transaction.type === 'NEW') {
       newByItem.set(itemId, (newByItem.get(itemId) || 0) + quantity);
     }
-  }
-
-  for (const deliveryItem of deliveryItems) {
-    const itemId = _toItemId(deliveryItem.inventory_id);
-    if (!itemId) {
-      continue;
-    }
-
-    deliveredByItem.set(
-      itemId,
-      (deliveredByItem.get(itemId) || 0) + Number(deliveryItem.quantity || 0),
-    );
   }
 
   const result = new Map();
@@ -92,17 +63,16 @@ async function calculateInventoryStocks(itemIds, initialStockOverrides = new Map
     return new Map();
   }
 
-  const [items, transactions, deliveryItems] = await Promise.all([
+  const [items, transactions] = await Promise.all([
     fetchMany('inventory', {
       filters: [{ column: 'id', operator: 'in', value: uniqueItemIds }],
     }),
     fetchMany('transactions', {
       filters: [{ column: 'inventoryId', operator: 'in', value: uniqueItemIds }],
     }),
-    _fetchDeliveryItems(uniqueItemIds),
   ]);
 
-  return _buildStockMap(items, transactions, deliveryItems, initialStockOverrides);
+  return _buildStockMap(items, transactions, initialStockOverrides);
 }
 
 async function recalculateInventoryStocks(itemIds, initialStockOverrides = new Map()) {
@@ -137,13 +107,12 @@ async function recalculateInventoryStock(itemId, initialStockOverride) {
 }
 
 async function recalculateAllInventoryStock() {
-  const [items, transactions, deliveryItems] = await Promise.all([
+  const [items, transactions] = await Promise.all([
     fetchMany('inventory'),
     fetchMany('transactions'),
-    _fetchDeliveryItems([]),
   ]);
 
-  const stockMap = _buildStockMap(items, transactions, deliveryItems);
+  const stockMap = _buildStockMap(items, transactions);
   const entries = Array.from(stockMap.entries());
 
   for (let index = 0; index < entries.length; index += 25) {

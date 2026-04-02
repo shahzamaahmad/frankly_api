@@ -1,7 +1,6 @@
 const express = require('express');
 const multer = require('multer');
 const { fetchById, fetchMany, deleteRow, insertRow, updateRow } = require('../lib/db');
-const { getSupabaseAdmin } = require('../lib/supabase');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
 
@@ -69,22 +68,10 @@ function normalizeInventoryPayload(body) {
 }
 
 async function calculateCurrentStock(itemId, initialStockOverride) {
-  const [transactions, deliveryItems] = await Promise.all([
+  const [transactions] = await Promise.all([
     fetchMany('transactions', {
       filters: [{ column: 'inventoryId', operator: 'eq', value: itemId }],
     }),
-    (async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from('delivery_items')
-        .select('inventory_id, quantity')
-        .eq('inventory_id', itemId);
-
-      if (error) {
-        throw error;
-      }
-
-      return data || [];
-    })(),
   ]);
 
   let totalIssued = 0;
@@ -93,7 +80,10 @@ async function calculateCurrentStock(itemId, initialStockOverride) {
   let totalDelivered = 0;
 
   for (const transaction of transactions) {
-    if (
+    if (transaction.type === 'DELIVERY') {
+      totalDelivered += Number(transaction.quantity || 0);
+    }
+    else if (
       transaction.type === 'ISSUE' ||
       transaction.type === 'EMPLOYEE ISSUE' ||
       transaction.type === 'CONSUMED'
@@ -102,10 +92,6 @@ async function calculateCurrentStock(itemId, initialStockOverride) {
     }
     else if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
     else if (transaction.type === 'NEW') totalNew += Number(transaction.quantity || 0);
-  }
-
-  for (const deliveryItem of deliveryItems) {
-    totalDelivered += Number(deliveryItem.quantity || 0);
   }
 
   return Number(initialStockOverride || 0) + totalDelivered - totalIssued + totalReturned + totalNew;
@@ -118,17 +104,10 @@ async function recalculateInventoryStock(itemId, initialStockOverride) {
 }
 
 async function recalculateAllInventoryStock() {
-  const [items, transactions, deliveryItemsResult] = await Promise.all([
+  const [items, transactions] = await Promise.all([
     fetchMany('inventory'),
     fetchMany('transactions'),
-    getSupabaseAdmin()
-      .from('delivery_items')
-      .select('inventory_id, quantity'),
   ]);
-
-  if (deliveryItemsResult.error) {
-    throw deliveryItemsResult.error;
-  }
 
   const issuedByItem = new Map();
   const returnedByItem = new Map();
@@ -142,7 +121,9 @@ async function recalculateAllInventoryStock() {
     }
 
     const quantity = Number(transaction.quantity || 0);
-    if (
+    if (transaction.type === 'DELIVERY') {
+      deliveredByItem.set(itemId, (deliveredByItem.get(itemId) || 0) + quantity);
+    } else if (
       transaction.type === 'ISSUE' ||
       transaction.type === 'EMPLOYEE ISSUE' ||
       transaction.type === 'CONSUMED'
@@ -153,18 +134,6 @@ async function recalculateAllInventoryStock() {
     } else if (transaction.type === 'NEW') {
       newByItem.set(itemId, (newByItem.get(itemId) || 0) + quantity);
     }
-  }
-
-  for (const deliveryItem of deliveryItemsResult.data || []) {
-    const itemId = String(deliveryItem.inventory_id || '');
-    if (!itemId) {
-      continue;
-    }
-
-    deliveredByItem.set(
-      itemId,
-      (deliveredByItem.get(itemId) || 0) + Number(deliveryItem.quantity || 0),
-    );
   }
 
   const updates = items.map(async (item) => {
