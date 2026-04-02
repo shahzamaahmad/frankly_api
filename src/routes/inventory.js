@@ -47,6 +47,44 @@ async function resolveWarehouseSite() {
   return sites.find(normalizeSiteLabel) || null;
 }
 
+async function populateInventoryLocations(items) {
+  const list = Array.isArray(items) ? items : [items];
+  if (!list.length) {
+    return [];
+  }
+
+  const supportsLocationSiteId = await hasColumn('inventory', 'locationSiteId');
+  if (!supportsLocationSiteId) {
+    return list;
+  }
+
+  const [sites, warehouseSite] = await Promise.all([
+    fetchMany('sites'),
+    resolveWarehouseSite(),
+  ]);
+  const siteMap = new Map(
+    sites.map((site) => [String(site.id || site._id || ''), site]),
+  );
+  const warehouseSiteId = warehouseSite
+    ? String(warehouseSite.id || warehouseSite._id || '')
+    : null;
+
+  return list.map((item) => {
+    const locationSiteId = String(item.locationSiteId || item.location_site_id || '');
+    const linkedSite = locationSiteId ? siteMap.get(locationSiteId) : null;
+    const fallbackLocation = linkedSite
+      ? String(linkedSite.siteName || linkedSite.name || '')
+      : (locationSiteId && warehouseSiteId && locationSiteId === warehouseSiteId)
+          ? 'Warehouse'
+          : '';
+
+    return {
+      ...item,
+      location: item.location || fallbackLocation || 'Warehouse',
+    };
+  });
+}
+
 async function buildInventoryLocationPayload(body, existing = null) {
   const supportsLocation = await hasColumn('inventory', 'location');
   const supportsLocationSiteId = await hasColumn('inventory', 'locationSiteId');
@@ -229,8 +267,9 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
     data.currentStock = Number(data.initialStock || 0);
 
     const inventory = await insertRow('inventory', data);
+    const [populated] = await populateInventoryLocations(inventory);
 
-    res.status(201).json(inventory);
+    res.status(201).json(populated);
   } catch (err) {
     console.error('Create inventory error:', err);
     res.status(400).json({ error: 'Failed to create inventory item' });
@@ -252,7 +291,7 @@ router.get('/', checkPermission('viewInventory'), async (req, res) => {
     const ascending = req.query.sortOrder === 'asc';
     const list = await fetchMany('inventory', { filters, orderBy: sortBy, ascending });
 
-    res.json(list);
+    res.json(await populateInventoryLocations(list));
   } catch (err) {
     console.error('Get inventory error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -267,7 +306,8 @@ router.get('/barcode/:barcode', checkPermission('viewInventory'), async (req, re
     });
     const item = inventory[0];
     if (!item) return res.status(404).json({ error: 'Item not found' });
-    res.json(item);
+    const [populated] = await populateInventoryLocations(item);
+    res.json(populated);
   } catch (err) {
     console.error('Barcode search error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -282,7 +322,8 @@ router.get('/sku/:sku', checkPermission('viewInventory'), async (req, res) => {
     });
     const item = inventory[0];
     if (!item) return res.status(404).json({ error: 'Item not found' });
-    res.json(item);
+    const [populated] = await populateInventoryLocations(item);
+    res.json(populated);
   } catch (err) {
     console.error('SKU search error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -293,7 +334,8 @@ router.get('/:id', checkPermission('viewInventory'), async (req, res) => {
   try {
     const inventory = await fetchById('inventory', req.params.id);
     if (!inventory) return res.status(404).json({ error: 'Inventory item not found' });
-    res.json(inventory);
+    const [populated] = await populateInventoryLocations(inventory);
+    res.json(populated);
   } catch (err) {
     console.error('Get inventory item error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -330,8 +372,9 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
       updated.initialStock !== undefined ? updated.initialStock : existing.initialStock,
     );
     updated.currentStock = currentStock;
+    const [populated] = await populateInventoryLocations(updated);
 
-    res.json(updated);
+    res.json(populated);
   } catch (err) {
     console.error('Update inventory error:', err);
     res.status(400).json({ error: 'Failed to update inventory item' });
@@ -354,7 +397,8 @@ router.patch('/:id', checkPermission('editInventory'), async (req, res) => {
 
     const updated = await updateRow('inventory', req.params.id, updates);
     if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
-    res.json(updated);
+    const [populated] = await populateInventoryLocations(updated);
+    res.json(populated);
   } catch (err) {
     console.error('Patch inventory error:', err);
     res.status(400).json({ error: 'Failed to update inventory item' });
