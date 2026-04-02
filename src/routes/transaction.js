@@ -328,10 +328,6 @@ function validateTransactionInput(body) {
     return 'Site is required for issue transactions';
   }
 
-  if (normalizedType === 'CONSUMED' && !toSite) {
-    return 'Site is required for consumed transactions';
-  }
-
   if (normalizedType === 'DELIVERY' && !body?.item) {
     return 'Item is required for delivery transactions';
   }

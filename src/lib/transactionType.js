@@ -4,7 +4,6 @@ const VALID_TRANSACTION_TYPES = [
   'RETURN',
   'NEW',
   'EMPLOYEE ISSUE',
-  'CONSUMED',
   'SITE TRANSFER',
 ];
 
