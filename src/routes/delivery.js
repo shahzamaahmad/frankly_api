@@ -234,6 +234,7 @@ async function getDeliveryColumnSupport() {
     hasColumn('transactions', 'invoiceNumber'),
     hasColumn('transactions', 'deliveryRemarks'),
     hasColumn('transactions', 'toSiteId'),
+    hasColumn('transactions', 'proofImage'),
   ]);
 
   return {
@@ -246,6 +247,7 @@ async function getDeliveryColumnSupport() {
     invoiceNumber: columns[6],
     deliveryRemarks: columns[7],
     toSiteId: columns[8],
+    proofImage: columns[9],
   };
 }
 
@@ -281,6 +283,9 @@ async function buildDeliveryTransactionPayloads({
       : {}),
     ...(columnSupport.deliveryRemarks
       ? { deliveryRemarks: body.remarks?.trim() || null }
+      : {}),
+    ...(columnSupport.proofImage
+      ? { proofImage: body.proofImage || null }
       : {}),
   };
 
@@ -370,6 +375,7 @@ async function populateDeliveriesFromRows(rows) {
       receivedBy: head.receivedBy || null,
       remarks: head.deliveryRemarks || head.notes || null,
       invoiceImage: head.invoiceImage || null,
+      proofImage: head.proofImage || null,
       invoiceNumber: head.invoiceNumber || null,
       items: sortedRows.map((row) => ({
         itemName: inventoryMap.get(String(row.inventoryId)) || row.inventoryId,

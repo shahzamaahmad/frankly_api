@@ -94,6 +94,9 @@ async function buildTransactionWritePayload(body) {
   if (await hasColumn('transactions', 'notes')) {
     payload.notes = body.returnDetails?.notes || null;
   }
+  if (await hasColumn('transactions', 'proofImage')) {
+    payload.proofImage = body.proofImage || null;
+  }
 
   const employeeId = body.employee || null;
   if (!employeeId) {
@@ -122,6 +125,7 @@ async function buildTransactionPayloadConfig() {
     supportsEmployeeName,
     supportsFromSiteId,
     supportsToSiteId,
+    supportsProofImage,
   ] = await Promise.all([
     hasColumn('transactions', 'notes'),
     hasColumn('transactions', 'employeeId'),
@@ -129,6 +133,7 @@ async function buildTransactionPayloadConfig() {
     hasColumn('transactions', 'employeeName'),
     hasColumn('transactions', 'fromSiteId'),
     hasColumn('transactions', 'toSiteId'),
+    hasColumn('transactions', 'proofImage'),
   ]);
 
   return {
@@ -138,6 +143,7 @@ async function buildTransactionPayloadConfig() {
     supportsEmployeeName,
     supportsFromSiteId,
     supportsToSiteId,
+    supportsProofImage,
   };
 }
 
@@ -193,6 +199,9 @@ function buildTransactionWritePayloadFromConfig(body, config, employeeMap = new 
 
   if (config.supportsNotes) {
     payload.notes = body.returnDetails?.notes || null;
+  }
+  if (config.supportsProofImage) {
+    payload.proofImage = body.proofImage || null;
   }
 
   const employeeId = body.employee || null;
