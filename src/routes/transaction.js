@@ -352,6 +352,8 @@ function validateTransactionInput(body) {
   const normalizedType = normalizeTransactionType(body?.type);
   const item = body?.item;
   const quantity = Number(body?.quantity);
+  const fromSite = body?.fromSite || body?.fromSiteId || body?.site || null;
+  const toSite = body?.toSite || body?.toSiteId || body?.site || null;
 
   if (!normalizedType || !item || !quantity || quantity <= 0) {
     return 'Invalid input data';
@@ -361,11 +363,11 @@ function validateTransactionInput(body) {
     return 'Invalid transaction type';
   }
 
-  if (normalizedType === 'ISSUE' && !body?.site) {
+  if (normalizedType === 'ISSUE' && !toSite) {
     return 'Site is required for issue transactions';
   }
 
-  if (normalizedType === 'CONSUMED' && !body?.site) {
+  if (normalizedType === 'CONSUMED' && !toSite) {
     return 'Site is required for consumed transactions';
   }
 
@@ -373,7 +375,7 @@ function validateTransactionInput(body) {
     return 'Item is required for delivery transactions';
   }
 
-  if (normalizedType === 'RETURN' && !body?.site && !body?.employee) {
+  if (normalizedType === 'RETURN' && !fromSite && !body?.employee) {
     return 'Site or employee is required for return transactions';
   }
 
@@ -382,8 +384,6 @@ function validateTransactionInput(body) {
   }
 
   if (normalizedType === 'SITE TRANSFER') {
-    const fromSite = body?.fromSite || body?.site;
-    const toSite = body?.toSite || body?.toSiteId;
     if (!fromSite || !toSite) {
       return 'Source and destination sites are required for site transfer transactions';
     }
