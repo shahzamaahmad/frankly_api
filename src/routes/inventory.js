@@ -93,7 +93,13 @@ async function calculateCurrentStock(itemId, initialStockOverride) {
   let totalDelivered = 0;
 
   for (const transaction of transactions) {
-    if (transaction.type === 'ISSUE') totalIssued += Number(transaction.quantity || 0);
+    if (
+      transaction.type === 'ISSUE' ||
+      transaction.type === 'EMPLOYEE ISSUE' ||
+      transaction.type === 'CONSUMED'
+    ) {
+      totalIssued += Number(transaction.quantity || 0);
+    }
     else if (transaction.type === 'RETURN') totalReturned += Number(transaction.quantity || 0);
     else if (transaction.type === 'NEW') totalNew += Number(transaction.quantity || 0);
   }
@@ -136,7 +142,11 @@ async function recalculateAllInventoryStock() {
     }
 
     const quantity = Number(transaction.quantity || 0);
-    if (transaction.type === 'ISSUE') {
+    if (
+      transaction.type === 'ISSUE' ||
+      transaction.type === 'EMPLOYEE ISSUE' ||
+      transaction.type === 'CONSUMED'
+    ) {
       issuedByItem.set(itemId, (issuedByItem.get(itemId) || 0) + quantity);
     } else if (transaction.type === 'RETURN') {
       returnedByItem.set(itemId, (returnedByItem.get(itemId) || 0) + quantity);

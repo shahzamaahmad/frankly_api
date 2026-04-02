@@ -4,6 +4,13 @@ const checkPermission = require('../middlewares/checkPermission');
 const { recalculateInventoryStocks } = require('../lib/stock');
 
 const router = express.Router();
+const DIRECT_TRANSACTION_TYPES = [
+  'ISSUE',
+  'RETURN',
+  'NEW',
+  'EMPLOYEE ISSUE',
+  'CONSUMED',
+];
 
 const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
 
@@ -151,7 +158,7 @@ async function populateTransactions(transactions) {
     timestamp: transaction.eventTimestamp || transaction.timestamp,
     returnDetails: (transaction.returnCondition || transaction.notes)
       ? {
-        condition: transaction.returnCondition || 'Good',
+        condition: transaction.returnCondition || '',
         notes: transaction.notes || null,
       }
       : null,
@@ -190,6 +197,38 @@ async function generateTransactionId(timestamp) {
     transactionId: `${prefix}${String(nextNum).padStart(4, '0')}`,
     timestamp: now.toISOString(),
   };
+}
+
+function validateTransactionInput(body) {
+  const normalizedType = String(body?.type || '').toUpperCase();
+  const item = body?.item;
+  const quantity = Number(body?.quantity);
+
+  if (!normalizedType || !item || !quantity || quantity <= 0) {
+    return 'Invalid input data';
+  }
+
+  if (!DIRECT_TRANSACTION_TYPES.includes(normalizedType)) {
+    return 'Invalid transaction type';
+  }
+
+  if (normalizedType === 'ISSUE' && !body?.site) {
+    return 'Site is required for issue transactions';
+  }
+
+  if (normalizedType === 'CONSUMED' && !body?.site) {
+    return 'Site is required for consumed transactions';
+  }
+
+  if (normalizedType === 'RETURN' && !body?.site && !body?.employee) {
+    return 'Site or employee is required for return transactions';
+  }
+
+  if (normalizedType === 'EMPLOYEE ISSUE' && !body?.employee) {
+    return 'Employee is required for employee issue transactions';
+  }
+
+  return null;
 }
 
 router.get('/', checkPermission('viewTransactions'), async (req, res) => {
@@ -233,19 +272,11 @@ router.get('/:id', checkPermission('viewTransactions'), async (req, res) => {
 
 router.post('/', checkPermission('addTransactions'), async (req, res) => {
   try {
-    const { type, site, item, quantity, timestamp } = req.body;
-    const normalizedType = String(type || '').toUpperCase();
+    const { item, timestamp } = req.body;
 
-    if (!normalizedType || !item || !quantity || Number(quantity) <= 0) {
-      return res.status(400).json({ error: 'Invalid input data' });
-    }
-
-    if (!['ISSUE', 'RETURN', 'NEW'].includes(normalizedType)) {
-      return res.status(400).json({ error: 'Invalid transaction type' });
-    }
-
-    if (normalizedType !== 'NEW' && !site) {
-      return res.status(400).json({ error: 'Site is required' });
+    const validationError = validateTransactionInput(req.body);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
     }
 
     const { transactionId, timestamp: createdTimestamp } = await generateTransactionId(timestamp);
@@ -287,14 +318,9 @@ router.post('/bulk', checkPermission('addTransactions'), async (req, res) => {
     });
 
     for (const entry of normalized) {
-      if (!entry.type || !entry.item || !entry.quantity || entry.quantity <= 0) {
-        return res.status(400).json({ error: 'Invalid input data' });
-      }
-      if (!['ISSUE', 'RETURN', 'NEW'].includes(entry.type)) {
-        return res.status(400).json({ error: 'Invalid transaction type' });
-      }
-      if (entry.type !== 'NEW' && !entry.body.site) {
-        return res.status(400).json({ error: 'Site is required' });
+      const validationError = validateTransactionInput(entry.body);
+      if (validationError) {
+        return res.status(400).json({ error: validationError });
       }
     }
 

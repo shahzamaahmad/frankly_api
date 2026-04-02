@@ -47,7 +47,7 @@ async function initAppConfig() {
         'Delivery Management',
         'Contact Management',
         'Document Expiry Notifications',
-        'CSV/PDF Export for Reports',
+        'PDF Export for Reports',
         'Role-based Access Control',
         'Asset Assignment to Employees',
         'Image Upload with CDN Support'

@@ -39,7 +39,9 @@ function _buildStockMap(items, transactions, deliveryItems, initialStockOverride
     }
 
     const quantity = Number(transaction.quantity || 0);
-    if (transaction.type === 'ISSUE') {
+    if (transaction.type === 'ISSUE' ||
+        transaction.type === 'EMPLOYEE ISSUE' ||
+        transaction.type === 'CONSUMED') {
       issuedByItem.set(itemId, (issuedByItem.get(itemId) || 0) + quantity);
     } else if (transaction.type === 'RETURN') {
       returnedByItem.set(itemId, (returnedByItem.get(itemId) || 0) + quantity);
