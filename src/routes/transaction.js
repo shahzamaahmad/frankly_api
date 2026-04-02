@@ -12,6 +12,35 @@ const DIRECT_TRANSACTION_TYPES = [
   'CONSUMED',
 ];
 
+function normalizeTransactionType(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  const upper = raw.toUpperCase();
+  const compact = upper.replace(/[^A-Z]/g, '');
+
+  switch (compact) {
+    case 'ISSUE':
+      return 'ISSUE';
+    case 'RETURN':
+      return 'RETURN';
+    case 'NEW':
+      return 'NEW';
+    case 'EMPLOYEEISSUE':
+    case 'EMPLOYEE':
+      return 'EMPLOYEE ISSUE';
+    case 'CONSUMABLE':
+    case 'CONSUMED':
+      return 'CONSUMED';
+    case 'SITETRANSFER':
+      return 'SITE TRANSFER';
+    default:
+      return upper;
+  }
+}
+
 const getDubaiTime = () => new Date(new Date().getTime() + (4 * 60 * 60 * 1000));
 
 async function fetchUserSummaries(ids) {
@@ -37,7 +66,7 @@ function getTransactionEmployeeId(transaction) {
 
 async function buildTransactionWritePayload(body) {
   const payload = {
-    type: String(body.type || '').toUpperCase(),
+    type: normalizeTransactionType(body.type),
     siteId: body.site || null,
     inventoryId: body.item,
     quantity: Number(body.quantity),
@@ -90,7 +119,7 @@ async function buildTransactionPayloadConfig() {
 
 function buildTransactionWritePayloadFromConfig(body, config, employeeMap = new Map()) {
   const payload = {
-    type: String(body.type || '').toUpperCase(),
+    type: normalizeTransactionType(body.type),
     siteId: body.site || null,
     inventoryId: body.item,
     quantity: Number(body.quantity),
@@ -200,7 +229,7 @@ async function generateTransactionId(timestamp) {
 }
 
 function validateTransactionInput(body) {
-  const normalizedType = String(body?.type || '').toUpperCase();
+  const normalizedType = normalizeTransactionType(body?.type);
   const item = body?.item;
   const quantity = Number(body?.quantity);
 
@@ -311,7 +340,7 @@ router.post('/bulk', checkPermission('addTransactions'), async (req, res) => {
     }
 
     const normalized = source.map((body) => {
-      const type = String(body?.type || '').toUpperCase();
+      const type = normalizeTransactionType(body?.type);
       const item = body?.item;
       const quantity = Number(body?.quantity);
       return { body, type, item, quantity };
