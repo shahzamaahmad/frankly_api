@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { fetchById, fetchMany, deleteRow, insertRow, updateRow } = require('../lib/db');
+const { fetchById, fetchMany, deleteRow, hasColumn, insertRow, updateRow } = require('../lib/db');
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
 
@@ -25,6 +25,11 @@ function parseNumber(value) {
   }
   const parsed = Number(value);
   return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function normalizeLocation(value) {
+  const normalized = String(value || '').trim();
+  return normalized || 'Warehouse';
 }
 
 function normalizeInventoryPayload(body) {
@@ -246,6 +251,10 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
       return res.status(400).json({ error: 'Item name, SKU, and category are required' });
     }
 
+    if (await hasColumn('inventory', 'location')) {
+      data.location = normalizeLocation(data.location);
+    }
+
     data.currentStock = Number(data.initialStock || 0);
 
     const inventory = await insertRow('inventory', data);
@@ -338,6 +347,10 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
     delete data.currentStock;
     if (shouldClearImage) {
       data.imageUrl = null;
+    }
+
+    if (await hasColumn('inventory', 'location')) {
+      data.location = normalizeLocation(data.location || existing.location);
     }
 
     const updated = await updateRow('inventory', req.params.id, data);

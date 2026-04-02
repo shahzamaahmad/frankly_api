@@ -4,6 +4,17 @@ const checkPermission = require('../middlewares/checkPermission');
 
 const router = express.Router();
 
+function normalizeSiteIdentity(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function isWarehouseSite(site) {
+  return (
+    normalizeSiteIdentity(site?.siteCode) === 'WAREHOUSE' ||
+    normalizeSiteIdentity(site?.siteName || site?.name) === 'WAREHOUSE'
+  );
+}
+
 async function fetchUserSummaries(ids) {
   const userIds = uniqueIds(ids);
   if (!userIds.length) {
@@ -117,7 +128,14 @@ router.post('/', checkPermission('addSites'), async (req, res) => {
       return res.status(400).json({ error: 'Site code and name are required' });
     }
 
-    const site = await insertRow('sites', normalizeSitePayload(req.body));
+    const payload = normalizeSitePayload(req.body);
+    if (isWarehouseSite(payload)) {
+      payload.siteCode = 'WAREHOUSE';
+      payload.siteName = 'Warehouse';
+      payload.status = 'active';
+    }
+
+    const site = await insertRow('sites', payload);
     const populated = await populateSite(site);
     res.status(201).json(populated);
   } catch (err) {
@@ -149,9 +167,18 @@ router.get('/:id', checkPermission('viewSites'), async (req, res) => {
 
 router.put('/:id', checkPermission('editSites'), async (req, res) => {
   try {
+    const existing = await fetchById('sites', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Site not found' });
+
     const updates = normalizeSitePayload(req.body);
     delete updates._id;
     delete updates.id;
+
+    if (isWarehouseSite(existing) || isWarehouseSite(updates)) {
+      updates.siteCode = 'WAREHOUSE';
+      updates.siteName = 'Warehouse';
+      updates.status = 'active';
+    }
 
     const updated = await updateRow('sites', req.params.id, updates);
     if (!updated) return res.status(404).json({ error: 'Site not found' });
