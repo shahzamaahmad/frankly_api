@@ -260,6 +260,69 @@ function validateTransactionInput(body) {
   return null;
 }
 
+function transactionTimestampValue(transaction) {
+  const value = transaction?.eventTimestamp || transaction?.timestamp || null;
+  const parsed = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function transactionIdentityValue(transaction) {
+  return String(
+    transaction?.transactionId ||
+      transaction?.id ||
+      transaction?._id ||
+      '',
+  );
+}
+
+function isLaterTransaction(candidate, current) {
+  const candidateTimestamp = transactionTimestampValue(candidate);
+  const currentTimestamp = transactionTimestampValue(current);
+
+  if (candidateTimestamp !== currentTimestamp) {
+    return candidateTimestamp > currentTimestamp;
+  }
+
+  return transactionIdentityValue(candidate) >
+    transactionIdentityValue(current);
+}
+
+function isStoredSiteTransferTransaction(transaction) {
+  const type = normalizeTransactionType(transaction?.type);
+  const notes = String(transaction?.notes || '').trim().toLowerCase();
+  return (
+    (type === 'RETURN' && notes.includes('site transfer to ')) ||
+    (type === 'ISSUE' && notes.includes('site transfer from '))
+  );
+}
+
+async function getDeleteBlockReason(transaction) {
+  if (isStoredSiteTransferTransaction(transaction)) {
+    return 'Site transfer transactions cannot be deleted individually.';
+  }
+
+  const inventoryId = transaction?.inventoryId || null;
+  if (!inventoryId) {
+    return null;
+  }
+
+  const relatedTransactions = await fetchMany('transactions', {
+    filters: [{ column: 'inventoryId', operator: 'eq', value: inventoryId }],
+  });
+  const currentId = String(transaction.id || transaction._id || '');
+
+  const hasLaterMovement = relatedTransactions.some((entry) => {
+    const entryId = String(entry.id || entry._id || '');
+    return entryId !== currentId && isLaterTransaction(entry, transaction);
+  });
+
+  if (hasLaterMovement) {
+    return 'Cannot delete this transaction because newer movement exists for this item. Delete the latest related transaction first, or add a correcting transaction instead.';
+  }
+
+  return null;
+}
+
 router.get('/', checkPermission('viewTransactions'), async (req, res) => {
   try {
     const filters = [];
@@ -404,6 +467,11 @@ router.delete('/:id', checkPermission('deleteTransactions'), async (req, res) =>
   try {
     const transaction = await fetchById('transactions', req.params.id);
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
+
+    const deleteBlockReason = await getDeleteBlockReason(transaction);
+    if (deleteBlockReason) {
+      return res.status(409).json({ error: deleteBlockReason });
+    }
 
     await deleteRow('transactions', req.params.id);
     await recalculateInventoryStocks([transaction.inventoryId]);
