@@ -139,12 +139,7 @@ async function uploadInvoice(req, body) {
   }
 }
 
-async function generateDeliveryId() {
-  const supportsDeliveryId = await hasColumn('transactions', 'deliveryId');
-  if (!supportsDeliveryId) {
-    throw new Error('transactions.delivery_id column is required');
-  }
-
+async function generateDeliveryTransactionId() {
   const now = getDubaiTime();
   const dd = String(now.getDate()).padStart(2, '0');
   const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -154,16 +149,16 @@ async function generateDeliveryId() {
   const latest = await fetchMany('transactions', {
     filters: [
       { column: 'type', operator: 'eq', value: 'DELIVERY' },
-      { column: 'deliveryId', operator: 'like', value: `${prefix}%` },
+      { column: 'transactionId', operator: 'like', value: `${prefix}%` },
     ],
-    orderBy: 'deliveryId',
+    orderBy: 'transactionId',
     ascending: false,
     limit: 1,
   });
 
   let nextNum = 1;
-  if (latest[0]?.deliveryId) {
-    const match = latest[0].deliveryId.match(/-(\d+)$/);
+  if (latest[0]?.transactionId) {
+    const match = latest[0].transactionId.match(/-(\d+)$/);
     if (match) {
       nextNum = Number.parseInt(match[1], 10) + 1;
     }
@@ -246,7 +241,6 @@ async function hasLaterNonDeliveryMovement(itemIds, referenceTimestamp, excluded
 
 async function getDeliveryColumnSupport() {
   const columns = await Promise.all([
-    hasColumn('transactions', 'deliveryId'),
     hasColumn('transactions', 'deliveryDate'),
     hasColumn('transactions', 'seller'),
     hasColumn('transactions', 'amount'),
@@ -260,30 +254,26 @@ async function getDeliveryColumnSupport() {
   ]);
 
   return {
-    deliveryId: columns[0],
-    deliveryDate: columns[1],
-    seller: columns[2],
-    amount: columns[3],
-    invoiceImage: columns[4],
-    invoiceNumber: columns[5],
-    notes: columns[6],
-    toSiteId: columns[7],
-    proofImage: columns[8],
-    employeeId: columns[9],
-    employee: columns[10],
+    deliveryDate: columns[0],
+    seller: columns[1],
+    amount: columns[2],
+    invoiceImage: columns[3],
+    invoiceNumber: columns[4],
+    notes: columns[5],
+    toSiteId: columns[6],
+    proofImage: columns[7],
+    employeeId: columns[8],
+    employee: columns[9],
   };
 }
 
 async function buildDeliveryTransactionPayloads({
   body,
   items,
-  deliveryId,
+  transactionId,
 }) {
   const columnSupport = await getDeliveryColumnSupport();
   const warehouseSiteId = await resolveWarehouseSiteId();
-  if (!columnSupport.deliveryId) {
-    throw new Error('transactions.delivery_id column is required');
-  }
 
   const deliveryDateIso =
     normalizeIsoDate(body.deliveryDate) || getDubaiTime().toISOString();
@@ -291,8 +281,8 @@ async function buildDeliveryTransactionPayloads({
   const receivedByEmployeeId = body.employee || body.receivedByEmployeeId || null;
   const sharedFields = {
     type: 'DELIVERY',
+    transactionId,
     eventTimestamp: deliveryDateIso,
-    deliveryId,
     ...(columnSupport.deliveryDate ? { deliveryDate: deliveryDateIso } : {}),
     ...(columnSupport.seller ? { seller: body.seller?.trim() || null } : {}),
     ...(columnSupport.amount ? { amount } : {}),
@@ -315,8 +305,7 @@ async function buildDeliveryTransactionPayloads({
       : {}),
   };
 
-  return items.map((item, index) => ({
-    transactionId: `${deliveryId}-${String(index + 1).padStart(2, '0')}`,
+  return items.map((item) => ({
     ...sharedFields,
     inventoryId: item.inventoryId,
     ...(columnSupport.toSiteId ? { toSiteId: warehouseSiteId } : {}),
@@ -324,15 +313,15 @@ async function buildDeliveryTransactionPayloads({
   }));
 }
 
-async function fetchDeliveryRowsByDeliveryId(deliveryId) {
-  if (!deliveryId) {
+async function fetchDeliveryRowsByTransactionId(transactionId) {
+  if (!transactionId) {
     return [];
   }
 
   return fetchMany('transactions', {
     filters: [
       { column: 'type', operator: 'eq', value: 'DELIVERY' },
-      { column: 'deliveryId', operator: 'eq', value: deliveryId },
+      { column: 'transactionId', operator: 'eq', value: transactionId },
     ],
     orderBy: 'eventTimestamp',
     ascending: true,
@@ -340,9 +329,9 @@ async function fetchDeliveryRowsByDeliveryId(deliveryId) {
 }
 
 async function resolveDeliveryRows(identifier) {
-  const byDeliveryId = await fetchDeliveryRowsByDeliveryId(identifier);
-  if (byDeliveryId.length) {
-    return byDeliveryId;
+  const byTransactionId = await fetchDeliveryRowsByTransactionId(identifier);
+  if (byTransactionId.length) {
+    return byTransactionId;
   }
 
   const row = await fetchById('transactions', identifier);
@@ -350,8 +339,8 @@ async function resolveDeliveryRows(identifier) {
     return [];
   }
 
-  if (row.deliveryId) {
-    return fetchDeliveryRowsByDeliveryId(row.deliveryId);
+  if (row.transactionId) {
+    return fetchDeliveryRowsByTransactionId(row.transactionId);
   }
 
   return [row];
@@ -382,7 +371,7 @@ async function populateDeliveriesFromRows(rows) {
   );
   const grouped = new Map();
   for (const row of rows) {
-    const groupId = String(row.deliveryId || row.id || row._id);
+    const groupId = String(row.transactionId || row.id || row._id);
     const current = grouped.get(groupId) || [];
     current.push(row);
     grouped.set(groupId, current);
@@ -400,7 +389,7 @@ async function populateDeliveriesFromRows(rows) {
 
     return {
       id: groupId,
-      deliveryId: head.deliveryId || groupId,
+      deliveryId: head.transactionId || groupId,
       deliveryDate: head.deliveryDate || head.eventTimestamp || null,
       seller: head.seller || null,
       amount: head.amount ?? null,
@@ -448,11 +437,11 @@ function normalizeBody(body) {
   return nextBody;
 }
 
-async function insertDeliveryTransactions({ body, items, deliveryId }) {
+async function insertDeliveryTransactions({ body, items, transactionId }) {
   const payloads = await buildDeliveryTransactionPayloads({
     body,
     items,
-    deliveryId,
+    transactionId,
   });
   const createdRows = [];
   for (const payload of payloads) {
@@ -479,11 +468,11 @@ router.post(
         return res.status(400).json({ error: 'Delivery must have at least one item' });
       }
 
-      const deliveryId = await generateDeliveryId();
+      const transactionId = await generateDeliveryTransactionId();
       const createdRows = await insertDeliveryTransactions({
         body,
         items,
-        deliveryId,
+        transactionId,
       });
       await recalculateInventoryStocks(items.map((item) => item.inventoryId));
 
@@ -575,7 +564,7 @@ router.put(
         });
       }
 
-      const deliveryId = existingRows[0].deliveryId || req.params.id;
+      const transactionId = existingRows[0].transactionId || req.params.id;
       for (const row of existingRows) {
         await deleteRow('transactions', row.id || row._id);
       }
@@ -603,7 +592,7 @@ router.put(
             body.invoiceNumber ?? existingRows[0].invoiceNumber,
         },
         items,
-        deliveryId,
+        transactionId,
       });
 
       await recalculateInventoryStocks(affectedItemIds);
