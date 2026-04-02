@@ -4,6 +4,7 @@ const { fetchById, fetchMany, deleteRow, hasColumn, insertRow, updateRow } = req
 const { uploadBufferToCloudinary } = require('../utils/cloudinary');
 const checkPermission = require('../middlewares/checkPermission');
 const {
+  _buildInventoryLocationState,
   recalculateAllInventoryStock: recalculateAllInventoryStockShared,
   recalculateInventoryStock: recalculateInventoryStockShared,
 } = require('../lib/stock');
@@ -53,34 +54,44 @@ async function populateInventoryLocations(items) {
     return [];
   }
 
-  const supportsLocationSiteId = await hasColumn('inventory', 'locationSiteId');
-  if (!supportsLocationSiteId) {
-    return list;
-  }
-
-  const [sites, warehouseSite] = await Promise.all([
+  const [supportsLocationSiteId, sites, transactions] = await Promise.all([
+    hasColumn('inventory', 'locationSiteId'),
     fetchMany('sites'),
-    resolveWarehouseSite(),
+    fetchMany('transactions', {
+      filters: [
+        {
+          column: 'inventoryId',
+          operator: 'in',
+          value: list.map((item) => String(item.id || item._id || '')),
+        },
+      ],
+    }),
   ]);
-  const siteMap = new Map(
-    sites.map((site) => [String(site.id || site._id || ''), site]),
-  );
-  const warehouseSiteId = warehouseSite
-    ? String(warehouseSite.id || warehouseSite._id || '')
-    : null;
+  const locationState = _buildInventoryLocationState(list, transactions, sites);
 
   return list.map((item) => {
-    const locationSiteId = String(item.locationSiteId || item.location_site_id || '');
-    const linkedSite = locationSiteId ? siteMap.get(locationSiteId) : null;
-    const fallbackLocation = linkedSite
-      ? String(linkedSite.siteName || linkedSite.name || '')
-      : (locationSiteId && warehouseSiteId && locationSiteId === warehouseSiteId)
-          ? 'Warehouse'
-          : '';
+    const itemId = String(item.id || item._id || '');
+    const state = locationState.get(itemId);
+    const fallbackLocation =
+      state?.location ||
+      item.location ||
+      'Warehouse';
 
     return {
       ...item,
-      location: item.location || fallbackLocation || 'Warehouse',
+      location: fallbackLocation,
+      locationBreakdown: Array.isArray(state?.locationBreakdown)
+          ? state.locationBreakdown
+          : [],
+      ...(supportsLocationSiteId
+        ? {
+            locationSiteId:
+              state?.locationSiteId ||
+              item.locationSiteId ||
+              item.location_site_id ||
+              null,
+          }
+        : {}),
     };
   });
 }

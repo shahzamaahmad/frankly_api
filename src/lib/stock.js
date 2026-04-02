@@ -37,50 +37,199 @@ function _transactionIdentityValue(transaction) {
   );
 }
 
-function _pickLaterTransaction(candidate, current) {
-  if (!current) {
-    return candidate;
-  }
-
-  const candidateTimestamp = _transactionTimestampValue(candidate);
-  const currentTimestamp = _transactionTimestampValue(current);
-  if (candidateTimestamp !== currentTimestamp) {
-    return candidateTimestamp > currentTimestamp ? candidate : current;
-  }
-
-  return _transactionIdentityValue(candidate) > _transactionIdentityValue(current)
-    ? candidate
-    : current;
+function _normalizeSiteId(value) {
+  const normalized = String(value || '').trim();
+  return normalized || null;
 }
 
-function _resolveLocationSiteIdFromTransaction(transaction, warehouseSiteId) {
-  const normalizedType = normalizeTransactionType(transaction?.type);
-
-  if (transaction?.toSiteId) {
-    return String(transaction.toSiteId);
+function _compareTransactions(a, b) {
+  const aTimestamp = _transactionTimestampValue(a);
+  const bTimestamp = _transactionTimestampValue(b);
+  if (aTimestamp !== bTimestamp) {
+    return aTimestamp - bTimestamp;
   }
 
-  if (transaction?.siteId) {
-    if (
-      normalizedType === 'RETURN' ||
-      normalizedType === 'NEW' ||
-      normalizedType === 'DELIVERY' ||
-      normalizedType === 'EMPLOYEE ISSUE'
-    ) {
-      return warehouseSiteId;
-    }
-    return String(transaction.siteId);
+  return _transactionIdentityValue(a).localeCompare(_transactionIdentityValue(b));
+}
+
+function _addSiteQuantity(balanceMap, siteId, quantity) {
+  const normalizedSiteId = _normalizeSiteId(siteId);
+  if (!normalizedSiteId || !Number.isFinite(quantity) || quantity === 0) {
+    return;
   }
 
-  if (transaction?.fromSiteId) {
-    return String(transaction.fromSiteId);
+  balanceMap.set(normalizedSiteId, (balanceMap.get(normalizedSiteId) || 0) + quantity);
+}
+
+function _getTransactionSourceSiteId(transaction, normalizedType) {
+  if (normalizedType === 'SITE TRANSFER') {
+    return _normalizeSiteId(transaction?.fromSiteId);
   }
 
-  if (normalizedType === 'NEW' || normalizedType === 'DELIVERY') {
-    return warehouseSiteId;
+  if (normalizedType === 'RETURN') {
+    return (
+      _normalizeSiteId(transaction?.fromSiteId) ||
+      _normalizeSiteId(transaction?.siteId)
+    );
   }
 
   return null;
+}
+
+function _getTransactionDestinationSiteId(transaction, normalizedType) {
+  if (normalizedType === 'SITE TRANSFER') {
+    return _normalizeSiteId(transaction?.toSiteId);
+  }
+
+  if (normalizedType === 'ISSUE') {
+    return (
+      _normalizeSiteId(transaction?.toSiteId) ||
+      _normalizeSiteId(transaction?.siteId)
+    );
+  }
+
+  return null;
+}
+
+function _buildInventoryLocationState(items, transactions, sites) {
+  const siteMap = new Map(
+    (sites || []).map((site) => [
+      String(site.id || site._id || ''),
+      site,
+    ]),
+  );
+  const warehouseSite = (sites || []).find(_normalizeSiteLabel) || null;
+  const warehouseSiteId = warehouseSite
+    ? String(warehouseSite.id || warehouseSite._id || '')
+    : null;
+  const balancesByItem = new Map();
+
+  for (const item of items || []) {
+    const itemId = _toItemId(item.id || item._id);
+    if (!itemId) {
+      continue;
+    }
+
+    const balanceMap = new Map();
+    const initialStock = Number(item.initialStock || 0);
+    if (warehouseSiteId && initialStock > 0) {
+      balanceMap.set(warehouseSiteId, initialStock);
+    }
+    balancesByItem.set(itemId, balanceMap);
+  }
+
+  const sortedTransactions = [...(transactions || [])].sort(_compareTransactions);
+
+  for (const transaction of sortedTransactions) {
+    const itemId = _toItemId(transaction.inventoryId);
+    if (!itemId || !balancesByItem.has(itemId)) {
+      continue;
+    }
+
+    const quantity = Number(transaction.quantity || 0);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      continue;
+    }
+
+    const normalizedType = normalizeTransactionType(transaction.type);
+    const balanceMap = balancesByItem.get(itemId);
+
+    if (!balanceMap) {
+      continue;
+    }
+
+    switch (normalizedType) {
+      case 'NEW':
+      case 'DELIVERY':
+        _addSiteQuantity(balanceMap, warehouseSiteId, quantity);
+        break;
+      case 'ISSUE':
+        _addSiteQuantity(balanceMap, warehouseSiteId, -quantity);
+        _addSiteQuantity(
+          balanceMap,
+          _getTransactionDestinationSiteId(transaction, normalizedType),
+          quantity,
+        );
+        break;
+      case 'RETURN':
+        _addSiteQuantity(
+          balanceMap,
+          _getTransactionSourceSiteId(transaction, normalizedType),
+          -quantity,
+        );
+        _addSiteQuantity(balanceMap, warehouseSiteId, quantity);
+        break;
+      case 'SITE TRANSFER':
+        _addSiteQuantity(
+          balanceMap,
+          _getTransactionSourceSiteId(transaction, normalizedType),
+          -quantity,
+        );
+        _addSiteQuantity(
+          balanceMap,
+          _getTransactionDestinationSiteId(transaction, normalizedType),
+          quantity,
+        );
+        break;
+      default:
+        if (isStockOutTransaction(normalizedType)) {
+          _addSiteQuantity(balanceMap, warehouseSiteId, -quantity);
+        }
+        break;
+    }
+  }
+
+  const result = new Map();
+
+  for (const item of items || []) {
+    const itemId = _toItemId(item.id || item._id);
+    if (!itemId) {
+      continue;
+    }
+
+    const balanceMap = balancesByItem.get(itemId) || new Map();
+    const positiveEntries = Array.from(balanceMap.entries())
+      .filter(([, quantity]) => Number(quantity) > 0)
+      .map(([siteId, quantity]) => {
+        const site = siteMap.get(siteId);
+        const siteName =
+          site?.siteName ||
+          site?.name ||
+          (warehouseSiteId && siteId === warehouseSiteId ? 'Warehouse' : 'Unknown');
+        return {
+          siteId,
+          siteName,
+          quantity: Number(quantity),
+          isWarehouse: Boolean(warehouseSiteId && siteId === warehouseSiteId),
+        };
+      })
+      .sort((a, b) => {
+        if (a.isWarehouse != b.isWarehouse) {
+          return a.isWarehouse ? -1 : 1;
+        }
+        return a.siteName.toLowerCase().localeCompare(b.siteName.toLowerCase());
+      });
+
+    let summary = 'No stock';
+    let locationSiteId = null;
+
+    if (positiveEntries.length === 1) {
+      summary = positiveEntries[0].siteName;
+      locationSiteId = positiveEntries[0].siteId;
+    } else if (positiveEntries.length > 1) {
+      summary = `${positiveEntries.length} locations`;
+    } else if (warehouseSiteId) {
+      summary = 'Warehouse';
+    }
+
+    result.set(itemId, {
+      location: summary,
+      locationSiteId,
+      locationBreakdown: positiveEntries,
+    });
+  }
+
+  return result;
 }
 
 function _buildStockMap(items, transactions, initialStockOverrides = new Map()) {
@@ -143,40 +292,7 @@ async function _resolveInventoryLocationUpdates(items, transactions) {
     return new Map();
   }
 
-  const siteMap = new Map(
-    sites.map((site) => [
-      String(site.id || site._id || ''),
-      site,
-    ]),
-  );
-  const warehouseSite = sites.find(_normalizeSiteLabel) || null;
-  const warehouseSiteId = warehouseSite
-    ? String(warehouseSite.id || warehouseSite._id || '')
-    : null;
-  const latestLocationTransactionByItem = new Map();
-
-  for (const transaction of transactions) {
-    const itemId = _toItemId(transaction.inventoryId);
-    if (!itemId) {
-      continue;
-    }
-
-    const locationSiteId = _resolveLocationSiteIdFromTransaction(
-      transaction,
-      warehouseSiteId,
-    );
-    if (!locationSiteId) {
-      continue;
-    }
-
-    latestLocationTransactionByItem.set(
-      itemId,
-      _pickLaterTransaction(
-        transaction,
-        latestLocationTransactionByItem.get(itemId),
-      ),
-    );
-  }
+  const locationState = _buildInventoryLocationState(items, transactions, sites);
 
   const updates = new Map();
   for (const item of items) {
@@ -185,22 +301,14 @@ async function _resolveInventoryLocationUpdates(items, transactions) {
       continue;
     }
 
-    const latestTransaction = latestLocationTransactionByItem.get(itemId);
-    const resolvedSiteId = latestTransaction
-      ? _resolveLocationSiteIdFromTransaction(latestTransaction, warehouseSiteId)
-      : String(item.locationSiteId || item.location_site_id || '');
-    const resolvedSite = resolvedSiteId ? siteMap.get(resolvedSiteId) : null;
-    const nextLocation =
-      resolvedSite?.siteName ||
-      resolvedSite?.name ||
-      item.location ||
-      'Warehouse';
+    const state = locationState.get(itemId);
+    const nextLocation = state?.location || item.location || 'Warehouse';
 
     updates.set(itemId, {
       ...(supportsLocation ? { location: nextLocation } : {}),
       ...(supportsLocationSiteId
         ? {
-            locationSiteId: resolvedSiteId || null,
+            locationSiteId: state?.locationSiteId || null,
           }
         : {}),
     });
@@ -300,6 +408,7 @@ async function recalculateAllInventoryStock() {
 }
 
 module.exports = {
+  _buildInventoryLocationState,
   calculateInventoryStocks,
   recalculateInventoryStock,
   recalculateInventoryStocks,
