@@ -12,11 +12,15 @@ async function uploadBufferToCloudinary(buffer, filename) {
     if (!buffer || buffer.length === 0) {
       return reject(new Error('Invalid buffer'));
     }
-    
+
     const opts = { resource_type: 'auto', folder: 'inventory' };
     if (filename) {
-      const sanitized = filename.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/\.[^/.]+$/, '');
-      opts.public_id = sanitized;
+      const sanitized = filename
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .replace(/\.[^/.]+$/, '')
+        .replace(/^_+|_+$/g, '') || 'asset';
+      const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      opts.public_id = `${sanitized}_${uniqueSuffix}`;
     }
     const uploadStream = cloudinary.uploader.upload_stream(opts, (error, result) => {
       if (error) {
