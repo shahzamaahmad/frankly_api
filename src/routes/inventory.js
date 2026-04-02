@@ -36,6 +36,62 @@ function normalizeLocation(value) {
   return normalized || 'Warehouse';
 }
 
+function normalizeSiteLabel(site) {
+  const siteCode = String(site?.siteCode || '').trim().toUpperCase();
+  const siteName = String(site?.siteName || site?.name || '').trim().toUpperCase();
+  return siteCode === 'WAREHOUSE' || siteName === 'WAREHOUSE';
+}
+
+async function resolveWarehouseSite() {
+  const sites = await fetchMany('sites');
+  return sites.find(normalizeSiteLabel) || null;
+}
+
+async function buildInventoryLocationPayload(body, existing = null) {
+  const supportsLocation = await hasColumn('inventory', 'location');
+  const supportsLocationSiteId = await hasColumn('inventory', 'locationSiteId');
+  const fallbackLocation = normalizeLocation(
+    body.location ?? existing?.location ?? 'Warehouse',
+  );
+  const explicitLocationSiteId = body.locationSiteId || body.location_site_id || null;
+  const payload = {};
+
+  if (!supportsLocation && !supportsLocationSiteId) {
+    return payload;
+  }
+
+  if (supportsLocationSiteId) {
+    let selectedSite = null;
+
+    if (explicitLocationSiteId) {
+      selectedSite = await fetchById('sites', explicitLocationSiteId);
+      if (!selectedSite) {
+        throw new Error('Selected location site not found');
+      }
+    } else if (fallbackLocation.toUpperCase() === 'WAREHOUSE') {
+      selectedSite = await resolveWarehouseSite();
+    }
+
+    payload.locationSiteId = selectedSite
+      ? String(selectedSite.id || selectedSite._id || '')
+      : null;
+
+    if (supportsLocation) {
+      payload.location = selectedSite
+        ? String(selectedSite.siteName || selectedSite.name || fallbackLocation)
+        : fallbackLocation;
+    }
+
+    return payload;
+  }
+
+  if (supportsLocation) {
+    payload.location = fallbackLocation;
+  }
+
+  return payload;
+}
+
 function normalizeInventoryPayload(body) {
   const payload = { ...body };
 
@@ -249,9 +305,7 @@ router.post('/', checkPermission('addInventory'), (req, res, next) => {
       return res.status(400).json({ error: 'Item name, SKU, and category are required' });
     }
 
-    if (await hasColumn('inventory', 'location')) {
-      data.location = normalizeLocation(data.location);
-    }
+    Object.assign(data, await buildInventoryLocationPayload(body));
 
     data.currentStock = Number(data.initialStock || 0);
 
@@ -347,9 +401,7 @@ router.put('/:id', checkPermission('editInventory'), (req, res, next) => {
       data.imageUrl = null;
     }
 
-    if (await hasColumn('inventory', 'location')) {
-      data.location = normalizeLocation(data.location || existing.location);
-    }
+    Object.assign(data, await buildInventoryLocationPayload(body, existing));
 
     const updated = await updateRow('inventory', req.params.id, data);
     if (!updated) return res.status(404).json({ error: 'Inventory item not found' });
