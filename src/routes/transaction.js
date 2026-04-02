@@ -197,6 +197,15 @@ router.get('/', checkPermission('viewTransactions'), async (req, res) => {
     const filters = [];
     if (req.query.site && typeof req.query.site === 'string') filters.push({ column: 'siteId', operator: 'eq', value: req.query.site });
     if (req.query.item && typeof req.query.item === 'string') filters.push({ column: 'inventoryId', operator: 'eq', value: req.query.item });
+    if (req.query.employee && typeof req.query.employee === 'string') {
+      if (await hasColumn('transactions', 'employeeId')) {
+        filters.push({ column: 'employeeId', operator: 'eq', value: req.query.employee });
+      } else if (await hasColumn('transactions', 'employee')) {
+        filters.push({ column: 'employee', operator: 'eq', value: req.query.employee });
+      } else {
+        return res.json([]);
+      }
+    }
 
     const transactions = await fetchMany('transactions', {
       filters,
