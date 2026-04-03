@@ -66,7 +66,7 @@ app.use((req, res, next) => {
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/auth', authRoutes);
 
