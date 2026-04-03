@@ -392,7 +392,6 @@ function isStoredSiteTransferTransaction(transaction) {
   const type = normalizeTransactionType(transaction?.type);
   const notes = String(transaction?.notes || '').trim().toLowerCase();
   return (
-    type === 'SITE TRANSFER' ||
     (type === 'RETURN' && notes.includes('site transfer to ')) ||
     (type === 'ISSUE' && notes.includes('site transfer from '))
   );
